@@ -1,0 +1,13 @@
+{
+  "name": "digitalitzacio-4eso-cloudflare",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MVP del curs Digitalització 4ESO amb Cloudflare Workers + D1 + editor Python",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "^4.35.0"
+  }
+}
