@@ -4,3 +4,5 @@
 .chapter-title{margin-top:2rem;border-bottom:1px solid #ddd;padding-bottom:.45rem}
 .input-label{display:block;margin:.9rem 0 .35rem;font-size:.9rem}
 textarea.stdin{min-height:90px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#fafafa}
+
+.preview-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:#fff7d6;border:1px solid #ead27a;border-radius:12px;padding:12px 14px;margin:0 0 18px}.preview-banner.compact{margin-bottom:14px}.preview-banner span{flex:1;min-width:240px}.preview-note{margin:.7rem 0;color:#725a00;background:#fff8dc;border-radius:8px;padding:9px 11px}.teacher-actions{display:flex;gap:10px;flex-wrap:wrap}button:disabled{opacity:.55;cursor:not-allowed}@media(max-width:700px){.teacher-actions{margin-top:12px}.preview-banner{align-items:stretch}.preview-banner button{width:100%}}

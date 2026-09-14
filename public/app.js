@@ -1,4 +1,4 @@
-let user=null, exercises=[], current=null, py=null;
+let user=null, exercises=[], current=null, py=null, studentPreview=false;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -16,7 +16,7 @@ async function api(path,opt={}){
 
 function nav(){
   $('#nav').innerHTML=user
-    ? `Hola, ${esc(user.name)}${user.role==='teacher'?' · Professor':''} · <button onclick="logout()">Sortir</button>`
+    ? `Hola, ${esc(user.name)}${user.role==='teacher'?' · Professor':''}${studentPreview?' · Vista d\'alumne':''} · ${studentPreview?'<button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button> · ':''}<button onclick=\"logout()\">Sortir</button>`
     : '';
 }
 
@@ -52,13 +52,26 @@ async function doRegister(){
 
 async function logout(){
   try{ await api('/api/logout'); }catch{}
-  user=null; nav(); login();
+  user=null; studentPreview=false; nav(); login();
+}
+
+function enterStudentPreview(){
+  if(!user || user.role!=='teacher') return;
+  studentPreview=true;
+  nav();
+  dashboard();
+}
+
+function exitStudentPreview(){
+  studentPreview=false;
+  nav();
+  teacherDashboard();
 }
 
 async function dashboard(){
   const d=await api('/api/exercises'); exercises=d.exercises;
   const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
-  $('#app').innerHTML=`<h1>Digitalització 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes de criptografia, aventura de text i dades.</p><div id="list"></div>`;
+  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner\"><strong>👁 Vista d\'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>':''}<h1>Digitalització 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes de criptografia, aventura de text i dades.</p><div id="list"></div>`;
   const last={};
   try{
     const s=await api('/api/my-submissions');
@@ -80,7 +93,7 @@ async function dashboard(){
 async function openExercise(id){
   current=await api(`/api/exercises/${id}`);
   let rubric=[]; try{rubric=JSON.parse(current.rubric_json||'[]')}catch{}
-  $('#app').innerHTML=`<div class="grid"><section class="card"><span class="pill">${esc(current.type)}</span><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul><button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card"><h2>Editor Python</h2><textarea id="code" spellcheck="false">${esc(current.starter_code)}</textarea><label class="input-label" for="stdin"><strong>Entrades de prova</strong> — una resposta per línia per als <code>input()</code></label><textarea id="stdin" class="stdin" spellcheck="false" placeholder="Exemple:\nGaspar\n42\nsí"></textarea><button onclick="runCode()">▶ Executar</button> <button onclick="submitCode()">✓ Entregar</button><h3>Sortida</h3><div id="output" class="output"></div><div id="grade"></div></section></div>`;
+  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner compact\"><strong>👁 Vista d\'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>':''}<div class="grid"><section class="card"><span class="pill">${esc(current.type)}</span><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul><button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card"><h2>Editor Python</h2><textarea id="code" spellcheck="false">${esc(current.starter_code)}</textarea><label class="input-label" for="stdin"><strong>Entrades de prova</strong> — una resposta per línia per als <code>input()</code></label><textarea id="stdin" class="stdin" spellcheck="false" placeholder="Exemple:\nGaspar\n42\nsí"></textarea><button onclick="runCode()">▶ Executar</button> <button onclick="submitCode()" ${studentPreview?'disabled title=\"Desactivat en la vista d’alumne del professor\"':''}>✓ Entregar</button>${studentPreview?'<p class=\"preview-note\">L’entrega està desactivada en mode de previsualització.</p>':''}<h3>Sortida</h3><div id="output" class="output"></div><div id="grade"></div></section></div>`;
 }
 async function loadPy(){
   if(py) return py;
@@ -139,6 +152,10 @@ async function localTests(code){
   return results;
 }
 async function submitCode(){
+  if(studentPreview){
+    $('#grade').innerHTML='<p class="preview-note">Aquesta és una vista prèvia del professor. Les entregues estan desactivades.</p>';
+    return;
+  }
   try{
     const code=$('#code').value; const tests=await localTests(code);
     $('#output').textContent=tests.map((t,i)=>`${t.passed?'✓':'✗'} Test ${i+1}${t.detail?' — '+String(t.detail).trim():''}`).join('\n')||'Sense tests automàtics configurats';
@@ -151,7 +168,7 @@ async function submitCode(){
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues i valida la nota final.</p></div><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div><div id="teacher-list"></div>`;
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues i valida la nota final.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div id="teacher-list"></div>`;
     if(!d.submissions.length){ $('#teacher-list').innerHTML='<div class="card"><p>Encara no hi ha entregues.</p></div>'; return; }
     for(const s of d.submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
