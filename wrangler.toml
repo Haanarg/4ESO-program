@@ -11,7 +11,7 @@ directory = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "digitalitzacio-4eso"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "390d2f66-91a9-49d8-a5ae-7629d0ee74de"
 migrations_dir = "migrations"
 
 [vars]
