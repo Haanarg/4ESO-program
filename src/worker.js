@@ -5,8 +5,23 @@ function b64u(bytes) { let s=''; for (const b of bytes) s+=String.fromCharCode(b
 function unb64u(s) { s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; const raw=atob(s); return Uint8Array.from(raw,c=>c.charCodeAt(0)); }
 async function sha256(s){return b64u(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))));}
 async function hmac(secret, data){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return b64u(new Uint8Array(await crypto.subtle.sign('HMAC',k,new TextEncoder().encode(data))));}
-async function passwordHash(password){const salt=crypto.randomUUID(); const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveBits']); const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:120000,hash:'SHA-256'},key,256); return `pbkdf2$${salt}$${b64u(new Uint8Array(bits))}`;}
-async function passwordOk(password, stored){const [,salt,want]=stored.split('$'); const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveBits']); const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:120000,hash:'SHA-256'},key,256); return b64u(new Uint8Array(bits))===want;}
+const PASSWORD_ITERATIONS = 10000;
+async function passwordHash(password){
+ const salt=crypto.randomUUID();
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveBits']);
+ const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:PASSWORD_ITERATIONS,hash:'SHA-256'},key,256);
+ return `pbkdf2$${PASSWORD_ITERATIONS}$${salt}$${b64u(new Uint8Array(bits))}`;
+}
+async function passwordOk(password, stored){
+ const parts=String(stored||'').split('$');
+ let iterations,salt,want;
+ if(parts.length===4){[,iterations,salt,want]=parts;iterations=Number(iterations)}
+ else if(parts.length===3){[,salt,want]=parts;iterations=120000}
+ else return false;
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),{name:'PBKDF2'},false,['deriveBits']);
+ const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations,hash:'SHA-256'},key,256);
+ return b64u(new Uint8Array(bits))===want;
+}
 function cookie(req){return req.headers.get('Cookie')?.match(/session=([^;]+)/)?.[1] || ''}
 async function auth(req,env){const t=cookie(req); if(!t)return null; const th=await sha256(t); const row=await env.DB.prepare('SELECT u.id,u.name,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(th,new Date().toISOString()).first(); return row||null;}
 async function session(user,env){const raw=crypto.randomUUID()+'-'+crypto.randomUUID(); const th=await sha256(raw); const exp=new Date(Date.now()+1000*60*60*24*14).toISOString(); await env.DB.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(th,user.id,exp).run(); return new Response(JSON.stringify({user}),{headers:{'content-type':'application/json','Set-Cookie':`session=${raw}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1209600`}})}
@@ -33,7 +48,26 @@ async function aiGrade(env, exercise, code, tests){
 
 async function api(req,env){
  await seed(env); const url=new URL(req.url); const path=url.pathname; const user=await auth(req,env);
- if(path==='/api/register' && req.method==='POST'){const b=await req.json(); if(!b.name||!b.email||!b.password||b.password.length<6)return json({error:'Nom, correu i contrasenya (mínim 6 caràcters) són obligatoris.'},400); try{const h=await passwordHash(b.password); const r=await env.DB.prepare('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?) RETURNING id,name,email,role').bind(b.name.trim(),b.email.toLowerCase().trim(),h,'student').first(); return session(r,env)}catch{return json({error:'Aquest correu ja està registrat.'},409)}}
+ if(path==='/api/register' && req.method==='POST'){
+  let b;
+  try{ b=await req.json(); }
+  catch{ return json({error:'La petició de registre no és JSON vàlid.'},400); }
+  if(!b.name||!b.email||!b.password||b.password.length<6) return json({error:'Nom, correu i contrasenya (mínim 6 caràcters) són obligatoris.'},400);
+  const email=b.email.toLowerCase().trim();
+  try{
+    const existing=await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
+    if(existing) return json({error:'Aquest correu ja està registrat.'},409);
+    const h=await passwordHash(b.password);
+    const r=await env.DB.prepare('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?) RETURNING id,name,email,role').bind(b.name.trim(),email,h,'student').first();
+    if(!r) return json({error:'No s’ha pogut crear l’usuari.'},500);
+    return session(r,env);
+  }catch(err){
+    console.error('REGISTER_ERROR', err);
+    const msg=String(err?.message||err||'Error desconegut');
+    if(/unique|constraint/i.test(msg)) return json({error:'Aquest correu ja està registrat.'},409);
+    return json({error:'Error intern en crear l’usuari.',detail:msg.slice(0,300)},500);
+  }
+}
  if(path==='/api/login' && req.method==='POST'){const b=await req.json(); const r=await env.DB.prepare('SELECT id,name,email,password_hash,role FROM users WHERE email=?').bind((b.email||'').toLowerCase().trim()).first(); if(!r||!(await passwordOk(b.password||'',r.password_hash)))return json({error:'Credencials incorrectes.'},401); delete r.password_hash; return session(r,env)}
  if(path==='/api/me') return json({user});
  if(path==='/api/logout'){const t=cookie(req);if(t)await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(t)).run();return new Response('',{status:204,headers:{'Set-Cookie':'session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0'}})}
@@ -42,8 +76,20 @@ async function api(req,env){
  if(path.startsWith('/api/exercises/') && path.endsWith('/submissions') && req.method==='POST'){if(!user)return json({error:'Cal iniciar sessió.'},401);const id=path.split('/')[3];const e=await env.DB.prepare('SELECT * FROM exercises WHERE id=?').bind(id).first();if(!e)return json({error:'Exercici no trobat'},404);const b=await req.json();const code=String(b.code||'').slice(0,30000);const ai=await aiGrade(env,e,code,b.tests||[]);const result=await env.DB.prepare('INSERT INTO submissions(user_id,exercise_id,code,test_results_json,ai_result_json,status) VALUES(?,?,?,?,?,?) RETURNING id,submitted_at').bind(user.id,e.id,code,JSON.stringify(b.tests||[]),JSON.stringify(ai),'pending').first();return json({submission:result,ai})}
  if(path==='/api/my-submissions' && user){const rows=await env.DB.prepare('SELECT s.*,e.code,e.title FROM submissions s JOIN exercises e ON e.id=s.exercise_id WHERE s.user_id=? ORDER BY s.submitted_at DESC').bind(user.id).all();return json({submissions:rows.results})}
  if(path==='/api/teacher/submissions' && user?.role==='teacher'){const rows=await env.DB.prepare('SELECT s.*,u.name,e.code,e.title FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id ORDER BY s.submitted_at DESC').all();return json({submissions:rows.results})}
- if(path.startsWith('/api/teacher/submissions/') && req.method==='POST' && user?.role==='teacher'){const id=path.split('/').pop();const b=await req.json();await env.DB.prepare('UPDATE submissions SET final_score=?,status=?,validated_at=CURRENT_TIMESTAMP WHERE id=?').bind(Number(b.score), 'validated', id).run();return json({ok:true})}
+ if(path.startsWith('/api/teacher/submissions/') && req.method==='POST' && user?.role==='teacher'){const id=path.split('/').pop();const b=await req.json();const score=Number(b.score);if(!Number.isFinite(score)||score<0||score>10)return json({error:'La nota ha de ser entre 0 i 10.'},400);await env.DB.prepare('UPDATE submissions SET final_score=?,status=?,validated_at=CURRENT_TIMESTAMP WHERE id=?').bind(score,'validated',id).run();return json({ok:true})}
  return json({error:'No trobat'},404);
 }
 
-export default {async fetch(req,env,ctx){if(new URL(req.url).pathname.startsWith('/api/')) return api(req,env); if(env.ASSETS){return env.ASSETS.fetch(req)} return text('Digitalització 4ESO');}};
+export default {
+ async fetch(req,env,ctx){
+  try{
+   if(new URL(req.url).pathname.startsWith('/api/')) return await api(req,env);
+   if(env.ASSETS) return env.ASSETS.fetch(req);
+   return text('Digitalització 4ESO');
+  }catch(err){
+   console.error('UNHANDLED_ERROR',err);
+   if(new URL(req.url).pathname.startsWith('/api/')) return json({error:'Error intern del servidor.',detail:String(err?.message||err||'Error desconegut').slice(0,300)},500);
+   return text('Error intern del servidor.',500);
+  }
+ }
+};
