@@ -29,7 +29,7 @@ async function start(){
 }
 
 function login(){
-  $('#app').innerHTML=`<div class="card auth"><h1>Digitalització 4ESO</h1><h2>Inicia sessió</h2><input id="email" type="email" placeholder="Correu electrònic"><input id="pw" type="password" placeholder="Contrasenya"><button onclick="doLogin()">Entrar</button> <button class="secondary" onclick="register()">Crear compte</button><p id="msg"></p></div>`;
+  $('#app').innerHTML=`<div class="card auth"><h1>Programació 4ESO</h1><h2>Inicia sessió</h2><input id="email" type="email" placeholder="Correu electrònic"><input id="pw" type="password" placeholder="Contrasenya"><button onclick="doLogin()">Entrar</button> <button class="secondary" onclick="register()">Crear compte</button><p id="msg"></p></div>`;
 }
 
 function register(){
@@ -71,7 +71,7 @@ function exitStudentPreview(){
 async function dashboard(){
   const d=await api('/api/exercises'); exercises=d.exercises;
   const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
-  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner\"><strong>👁 Vista d\'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>':''}<h1>Digitalització 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes de criptografia, aventura de text i dades.</p><div id="list"></div>`;
+  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner\"><strong>👁 Vista d\'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>':''}<h1>Programació 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes de criptografia, aventura de text i dades.</p><div id="list"></div>`;
   const last={};
   try{
     const s=await api('/api/my-submissions');
