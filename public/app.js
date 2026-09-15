@@ -83,9 +83,11 @@ async function dashboard(){
     $('#list').insertAdjacentHTML('beforeend',`<h2 class="chapter-title">Capítol ${chapter}: ${esc(chapterNames[chapter])}</h2>`);
     chapterExercises.forEach(e=>{
       const sub=last[e.id];
-      const status=sub?.final_score!=null
-        ? `<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`
-        : sub?.ai_result_json ? `<span class="status pending">Proposta IA pendent de validació</span>` : '';
+      const status=sub?.status==='returned'
+        ? ''
+        : sub?.final_score!=null
+          ? `<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`
+          : sub?.ai_result_json ? `<span class="status pending">Proposta IA pendent de validació</span>` : '';
       $('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${e.id})"><span class="pill">${esc(e.type)}</span><h3>${esc(e.code)} · ${esc(e.title)}</h3><p>${esc(e.statement.slice(0,220))}${e.statement.length>220?'…':''}</p>${status}</div>`);
     });
   }
@@ -173,7 +175,9 @@ async function teacherDashboard(){
     for(const s of d.submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
       const validated=s.status==='validated';
-      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p></details><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(ai.score??''))}" ${validated?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated?'disabled':''}>${validated?'✓ Validada':'Validar nota'}</button></div></article>`);
+      const returned=s.status==='returned';
+      const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':'Pendent';
+      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p></details><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(ai.score??''))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button>`}</div></article>`);
     }
   }catch(e){ $('#app').innerHTML=`<div class="card"><h1>Panell del professor</h1><p class="error">${esc(e.message)}</p></div>`; }
 }
@@ -183,6 +187,16 @@ async function validateSubmission(id){
   if(!Number.isFinite(score)||score<0||score>10){ alert('La nota ha de ser entre 0 i 10.'); return; }
   try{ await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({score})}); await teacherDashboard(); }
   catch(e){ alert(e.message); }
+}
+
+
+async function returnSubmission(id){
+  const ok=confirm("Vols retornar aquesta entrega?\n\nL'intent es conservarà a l'historial i l'exercici tornarà a aparèixer com a no fet perquè l'alumne el pugui repetir.");
+  if(!ok) return;
+  try{
+    await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({action:'return'})});
+    await teacherDashboard();
+  }catch(e){ alert(e.message); }
 }
 
 start();
