@@ -163,7 +163,17 @@ async function submitCode(){
     $('#output').textContent=tests.map((t,i)=>`${t.passed?'✓':'✗'} Test ${i+1}${t.detail?' — '+String(t.detail).trim():''}`).join('\n')||'Sense tests automàtics configurats';
     const d=await api(`/api/exercises/${current.id}/submissions`,{method:'POST',body:JSON.stringify({code,tests})});
     const ai=d.ai||{};
-    $('#grade').innerHTML=`<div class="card grade"><h2>Proposta de correcció</h2><div class="score">${ai.score==null?'—':esc(Number(ai.score).toFixed(1))}/10</div><p>${esc(ai.feedback||'Sense feedback')}</p>${Array.isArray(ai.hints)&&ai.hints.length?`<h3>Pistes</h3><ul>${ai.hints.map(h=>`<li>${esc(h)}</li>`).join('')}</ul>`:''}<small>La nota és provisional fins que el professor la validi.</small></div>`;
+    const criteria=Array.isArray(ai.criteria)?ai.criteria:[];
+    const strengths=Array.isArray(ai.strengths)?ai.strengths:[];
+    const errors=Array.isArray(ai.errors)?ai.errors:[];
+    const hints=Array.isArray(ai.hints)?ai.hints:[];
+    $('#grade').innerHTML=`<div class="card grade"><div class="ai-grade-head"><div><span class="pill">Correcció IA</span><h2>Proposta de correcció</h2></div><div class="score">${ai.score==null?'—':esc(Number(ai.score).toFixed(1))}/10</div></div>
+      ${criteria.length?`<div class="criteria-grid">${criteria.map(c=>`<div class="criterion"><div><strong>${esc(c.name)}</strong><span>${esc(c.score)} / ${esc(c.max)}</span></div><p>${esc(c.reason||'')}</p></div>`).join('')}</div>`:''}
+      <div class="student-feedback"><h3>Feedback</h3><p>${esc(ai.feedback||'Sense feedback')}</p></div>
+      ${strengths.length?`<h3>✓ Punts forts</h3><ul>${strengths.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+      ${errors.length?`<h3>Aspectes a revisar</h3><ul>${errors.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+      ${hints.length?`<h3>💡 Pistes per millorar</h3><ul>${hints.map(h=>`<li>${esc(h)}</li>`).join('')}</ul>`:''}
+      <div class="provisional-note">La correcció de la IA és orientativa. La nota final la valida el professor.</div></div>`;
   }catch(e){ $('#grade').innerHTML=`<p class="error">${esc(e.message)}</p>`; }
 }
 
@@ -177,7 +187,7 @@ async function teacherDashboard(){
       const validated=s.status==='validated';
       const returned=s.status==='returned';
       const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':'Pendent';
-      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p></details><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(ai.score??''))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button>`}</div></article>`);
+      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback per a l'alumne</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<h4>Rúbrica proposada</h4><div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</details><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(ai.score??''))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button>`}</div></article>`);
     }
   }catch(e){ $('#app').innerHTML=`<div class="card"><h1>Panell del professor</h1><p class="error">${esc(e.message)}</p></div>`; }
 }

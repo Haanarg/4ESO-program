@@ -80,11 +80,114 @@ const seedExercises = [
 async function seed(env){const n=await env.DB.prepare('SELECT COUNT(*) AS total FROM exercises').first(); if(Number(n?.total||0)>=seedExercises.length)return; for(const e of seedExercises){await env.DB.prepare(`INSERT OR IGNORE INTO exercises(chapter,code,title,type,statement,starter_code,reference_solution,rubric_json,tests_json,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(e.chapter,e.code,e.title,e.type,e.statement,e.starter,e.solution,JSON.stringify(e.rubric),JSON.stringify(e.tests),parseFloat(e.code)).run();}}
 
 async function aiGrade(env, exercise, code, tests){
- if(!env.OPENAI_API_KEY) return {score:null,feedback:'La IA encara no està configurada. La proposta es generarà només quan afegeixis OPENAI_API_KEY als secrets de Cloudflare.',criteria:[],configured:false};
- const prompt=`Ets el corrector pedagògic d'un curs de Python de 4t d'ESO. Avalua exclusivament els objectius ensenyats en aquest exercici. No donis la solució completa a l'alumne. Proposa una nota sobre 10, però recorda que el professor l'ha de validar.\n\nEXERCICI:\n${exercise.statement}\n\nCRITERIS:\n${exercise.rubric_json}\n\nRESULTATS DELS TESTS:\n${JSON.stringify(tests)}\n\nSOLUCIÓ DE REFERÈNCIA (només per al corrector):\n${exercise.reference_solution}\n\nCODI DE L'ALUMNE:\n${code}\n\nRetorna NOMÉS JSON vàlid amb aquesta forma: {"score":number,"criteria":[{"name":string,"score":number,"max":number,"reason":string}],"strengths":[string],"errors":[string],"feedback":string,"hints":[string]}`;
- const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{'Authorization':`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:env.AI_MODEL||'gpt-5.6-luna',input:prompt,store:false})});
- if(!r.ok) return {score:null,feedback:`No s'ha pogut consultar la IA (${r.status}).`,criteria:[],configured:true};
- const data=await r.json(); const out=data.output_text || data.output?.flatMap(x=>x.content||[]).map(x=>x.text||'').join('') || '{}'; try{return {...JSON.parse(out),configured:true}}catch{return {score:null,feedback:out,criteria:[],configured:true}}
+  if(!env.OPENAI_API_KEY) return {
+    score:null, feedback:"La IA encara no està configurada. Afegeix OPENAI_API_KEY als secrets de Cloudflare.",
+    teacher_feedback:"Falta configurar OPENAI_API_KEY.", criteria:[], strengths:[], errors:[], hints:[],
+    teacher_warning:"IA no configurada", configured:false
+  };
+
+  let rubric=[];
+  try{ rubric=JSON.parse(exercise.rubric_json||'[]'); }catch{}
+  const normalizedTests=Array.isArray(tests)?tests:[];
+  const failedTests=normalizedTests.filter(t=>t && (t.pass===false || t.ok===false || t.passed===false));
+  const passedTests=normalizedTests.filter(t=>t && (t.pass===true || t.ok===true || t.passed===true));
+
+  const prompt=`Ets un corrector pedagògic de Programació Python de 4t d'ESO.
+La teva feina és PROPOSAR una qualificació; la decisió final sempre és del professor.
+
+REGLES DE CORRECCIÓ:
+- Avalua només els coneixements i requisits de l'exercici.
+- Segueix estrictament la rúbrica proporcionada i respecta el màxim de cada criteri.
+- La suma de les puntuacions dels criteris ha de coincidir amb score (sobre 10).
+- Accepta solucions correctes diferents de la solució de referència.
+- Els tests automàtics són evidència objectiva. Si un test funcional falla, no afirmis que aquella funcionalitat funciona.
+- No penalitzis estil o conceptes avançats que l'exercici no demana.
+- Si el codi no es pot valorar amb prou seguretat, indica-ho a teacher_warning.
+- El feedback per a l'alumne ha de ser breu, clar, encoratjador i adequat a 4t d'ESO.
+- NO revelis la solució completa ni escriguis el programa corregit a l'alumne.
+- Els hints han de donar pistes accionables sense donar la resposta.
+- teacher_feedback pot ser més tècnic i explicar dubtes o incoherències.
+- No inventis resultats d'execució.
+
+EXERCICI:
+Codi: ${exercise.code}
+Títol: ${exercise.title}
+Tipus: ${exercise.type}
+Enunciat:
+${exercise.statement}
+
+RÚBRICA:
+${JSON.stringify(rubric)}
+
+TESTS AUTOMÀTICS:
+${JSON.stringify(normalizedTests)}
+Tests superats detectats: ${passedTests.length}
+Tests fallats detectats: ${failedTests.length}
+
+SOLUCIÓ DE REFERÈNCIA (només orientativa per al corrector; no la copiïs):
+${exercise.reference_solution||''}
+
+CODI / RESPOSTA DE L'ALUMNE:
+${code}
+
+Retorna exclusivament un objecte JSON amb:
+{
+ "score": number,
+ "criteria":[{"name":string,"score":number,"max":number,"reason":string}],
+ "strengths":[string],
+ "errors":[string],
+ "feedback":string,
+ "hints":[string],
+ "teacher_feedback":string,
+ "teacher_warning": string|null
+}`;
+
+  try{
+    const r=await fetch('https://api.openai.com/v1/responses',{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:env.AI_MODEL||'gpt-5.6-luna',
+        input:prompt,
+        store:false,
+        text:{format:{
+          type:'json_schema',
+          name:'grading_result',
+          strict:true,
+          schema:{
+            type:'object',
+            additionalProperties:false,
+            properties:{
+              score:{type:'number',minimum:0,maximum:10},
+              criteria:{type:'array',items:{type:'object',additionalProperties:false,properties:{
+                name:{type:'string'},score:{type:'number',minimum:0},max:{type:'number',minimum:0},reason:{type:'string'}
+              },required:['name','score','max','reason']}},
+              strengths:{type:'array',items:{type:'string'}},
+              errors:{type:'array',items:{type:'string'}},
+              feedback:{type:'string'},
+              hints:{type:'array',items:{type:'string'}},
+              teacher_feedback:{type:'string'},
+              teacher_warning:{type:['string','null']}
+            },
+            required:['score','criteria','strengths','errors','feedback','hints','teacher_feedback','teacher_warning']
+          }
+        }}
+      })
+    });
+    if(!r.ok){
+      const detail=(await r.text()).slice(0,500);
+      return {score:null,feedback:`No s'ha pogut consultar la IA (${r.status}).`,teacher_feedback:detail,criteria:[],strengths:[],errors:[],hints:[],teacher_warning:'Error de la API',configured:true};
+    }
+    const data=await r.json();
+    const out=data.output_text || data.output?.flatMap(x=>x.content||[]).map(x=>x.text||'').join('') || '{}';
+    const result=JSON.parse(out);
+    // Defensa addicional: normalitza nota i criteris abans de desar.
+    result.score=Math.max(0,Math.min(10,Number(result.score)||0));
+    if(!Array.isArray(result.criteria)) result.criteria=[];
+    return {...result,configured:true};
+  }catch(err){
+    return {score:null,feedback:"La correcció automàtica no s'ha pogut completar.",teacher_feedback:String(err?.message||err).slice(0,500),criteria:[],strengths:[],errors:[],hints:[],teacher_warning:'Error processant la resposta de la IA',configured:true};
+  }
 }
 
 async function api(req,env){

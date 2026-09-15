@@ -80,3 +80,15 @@ small{color:var(--muted)}
 .return-btn:hover{background:rgba(247,198,92,.09)}
 .status.returned{color:#c6cfdd;background:rgba(147,164,191,.10)}
 .returned-submission{opacity:.76;border-style:dashed}
+
+.ai-grade-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+.ai-grade-head h2{margin:.55rem 0 0}
+.criteria-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:18px 0}
+.criterion{background:#0b1423;border:1px solid var(--line);border-radius:11px;padding:13px}
+.criterion>div{display:flex;justify-content:space-between;gap:12px}.criterion span{color:var(--accent);font-weight:800}
+.criterion p{font-size:.9rem;margin:.55rem 0 0}
+.student-feedback{margin:18px 0;padding:14px;border-left:3px solid var(--accent);background:rgba(103,232,249,.05);border-radius:0 9px 9px 0}
+.provisional-note{margin-top:18px;padding:10px 12px;border-radius:9px;background:rgba(247,198,92,.07);color:#d8c58f;font-size:.85rem}
+.teacher-criteria p{margin:.45rem 0;padding:.6rem .75rem;background:#0b1423;border-radius:8px}
+.ai-warning{margin-top:12px;padding:10px 12px;border:1px solid rgba(247,198,92,.35);background:rgba(247,198,92,.08);border-radius:9px;color:#f5d98e}
+@media(max-width:600px){.ai-grade-head{display:block}.ai-grade-head .score{margin-top:12px}}
