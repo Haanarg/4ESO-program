@@ -92,3 +92,5 @@ small{color:var(--muted)}
 .teacher-criteria p{margin:.45rem 0;padding:.6rem .75rem;background:#0b1423;border-radius:8px}
 .ai-warning{margin-top:12px;padding:10px 12px;border:1px solid rgba(247,198,92,.35);background:rgba(247,198,92,.08);border-radius:9px;color:#f5d98e}
 @media(max-width:600px){.ai-grade-head{display:block}.ai-grade-head .score{margin-top:12px}}
+
+.delete-btn{background:rgba(239,68,68,.10)!important;border-color:rgba(239,68,68,.38)!important;color:#fca5a5!important}.delete-btn:hover{background:rgba(239,68,68,.18)!important;border-color:rgba(239,68,68,.65)!important}

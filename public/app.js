@@ -187,7 +187,7 @@ async function teacherDashboard(){
       const validated=s.status==='validated';
       const returned=s.status==='returned';
       const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':'Pendent';
-      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback per a l'alumne</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<h4>Rúbrica proposada</h4><div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</details><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(ai.score??''))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button>`}</div></article>`);
+      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback per a l'alumne</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<h4>Rúbrica proposada</h4><div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</details><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(ai.score??''))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑 Eliminar</button>`}</div></article>`);
     }
   }catch(e){ $('#app').innerHTML=`<div class="card"><h1>Panell del professor</h1><p class="error">${esc(e.message)}</p></div>`; }
 }
@@ -199,6 +199,14 @@ async function validateSubmission(id){
   catch(e){ alert(e.message); }
 }
 
+
+async function deleteSubmission(id){
+  if(!confirm("Vols eliminar definitivament aquesta entrega?\n\nAquesta acció esborrarà l'intent del panell i de l'historial de l'alumne i no es pot desfer.")) return;
+  try{
+    await api(`/api/teacher/submissions/${id}`,{method:'DELETE'});
+    await teacherDashboard();
+  }catch(e){ alert(e.message); }
+}
 
 async function returnSubmission(id){
   const ok=confirm("Vols retornar aquesta entrega?\n\nL'intent es conservarà a l'historial i l'exercici tornarà a aparèixer com a no fet perquè l'alumne el pugui repetir.");
