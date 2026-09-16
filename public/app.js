@@ -55,6 +55,62 @@ async function logout(){
   user=null; studentPreview=false; nav(); login();
 }
 
+
+async function teacherProgress(){
+  const d=await api('/api/teacher/progress');
+  const students=d.students||[], exs=d.exercises||[], subs=d.submissions||[], drafts=d.drafts||[];
+  const subMap=new Map(subs.map(s=>[`${s.user_id}:${s.exercise_id}`,s]));
+  const draftMap=new Map(drafts.map(x=>[`${x.user_id}:${x.exercise_id}`,x]));
+  const cell=(student,e)=>{
+    const s=subMap.get(`${student.id}:${e.id}`);
+    const dr=draftMap.get(`${student.id}:${e.id}`);
+    if(s?.status==='validated' && s.final_score!=null){
+      const n=Number(s.final_score);
+      return `<span class="progress-grade ${n>=5?'pass':'fail'}" title="Nota validada">${esc(s.final_score)}</span>`;
+    }
+    if(s?.status==='pending') return `<span class="progress-state pending" title="Entregada, pendent de validació">Pendent</span>`;
+    if(s?.status==='returned') return dr
+      ? `<span class="progress-state draft" title="Retornada i amb un nou esborrany">Esborrany</span>`
+      : `<span class="progress-state returned" title="Retornada perquè l'alumne la repeteixi">Retorn</span>`;
+    if(dr) return `<span class="progress-state draft" title="L'alumne té un esborrany desat">Esborrany</span>`;
+    return `<span class="progress-empty" title="Sense entrega">—</span>`;
+  };
+  const completedFor=student=>exs.filter(e=>{
+    const s=subMap.get(`${student.id}:${e.id}`);
+    return s?.status==='validated' && s.final_score!=null;
+  }).length;
+  $('#app').innerHTML=`
+    <section class="card progress-card">
+      <div class="progress-toolbar">
+        <div><h1>Seguiment dels alumnes</h1><p class="muted">Darrera situació de cada tasca. Les xifres són les notes validades pel professor.</p></div>
+        <button class="secondary" onclick="teacherDashboard()">← Panell professor</button>
+      </div>
+      <div class="progress-legend">
+        <span><b class="legend-swatch pass"></b> Aprovada</span>
+        <span><b class="legend-swatch fail"></b> Suspesa</span>
+        <span>Pendent = entregada per validar</span>
+        <span>Esborrany = encara no entregada</span>
+        <span>— = no iniciada</span>
+      </div>
+      <div class="progress-table-wrap">
+        <table class="progress-table">
+          <thead><tr>
+            <th class="student-col">Alumne</th>
+            <th class="summary-col">Fetes</th>
+            ${exs.map(e=>`<th title="${esc(e.title)}"><span>${esc(e.code)}</span><small>${esc(e.title)}</small></th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${students.map(st=>`<tr>
+              <th class="student-col"><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></th>
+              <td class="summary-col"><strong>${completedFor(st)}/${exs.length}</strong></td>
+              ${exs.map(e=>`<td>${cell(st,e)}</td>`).join('')}
+            </tr>`).join('') || `<tr><td colspan="${exs.length+2}">Encara no hi ha alumnes registrats.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
 function enterStudentPreview(){
   if(!user || user.role!=='teacher') return;
   studentPreview=true;
@@ -229,7 +285,7 @@ async function submitCode(){
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues i valida la nota final.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div id="teacher-list"></div>`;
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues i valida la nota final.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div id="teacher-list"></div>`;
     if(!d.submissions.length){ $('#teacher-list').innerHTML='<div class="card"><p>Encara no hi ha entregues.</p></div>'; return; }
     for(const s of d.submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}

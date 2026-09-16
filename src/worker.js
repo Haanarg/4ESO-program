@@ -239,6 +239,28 @@ async function api(req,env){
  if(path.startsWith('/api/exercises/') && req.method==='GET'){const id=path.split('/').pop(); const e=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json,tests_json FROM exercises WHERE id=?').bind(id).first(); return e?json(e):json({error:'No trobat'},404)}
  if(path.startsWith('/api/exercises/') && path.endsWith('/submissions') && req.method==='POST'){if(!user)return json({error:'Cal iniciar sessió.'},401);const id=path.split('/')[3];const e=await env.DB.prepare('SELECT * FROM exercises WHERE id=?').bind(id).first();if(!e)return json({error:'Exercici no trobat'},404);const b=await req.json();const code=String(b.code||'').slice(0,30000);const ai=await aiGrade(env,e,code,b.tests||[]);const result=await env.DB.prepare('INSERT INTO submissions(user_id,exercise_id,code,test_results_json,ai_result_json,status) VALUES(?,?,?,?,?,?) RETURNING id,submitted_at').bind(user.id,e.id,code,JSON.stringify(b.tests||[]),JSON.stringify(ai),'pending').first();try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=? AND exercise_id=?').bind(user.id,e.id).run();}catch{}return json({submission:result,ai})}
  if(path==='/api/my-submissions' && user){const rows=await env.DB.prepare('SELECT s.*,e.code,e.title FROM submissions s JOIN exercises e ON e.id=s.exercise_id WHERE s.user_id=? ORDER BY s.submitted_at DESC').bind(user.id).all();return json({submissions:rows.results})}
+ if(path==='/api/teacher/progress' && user?.role==='teacher'){
+  try{
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS drafts(
+      user_id INTEGER NOT NULL,
+      exercise_id INTEGER NOT NULL,
+      code TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id,exercise_id)
+    )`).run();
+    const students=(await env.DB.prepare(`SELECT id,name,email FROM users WHERE role='student' ORDER BY name COLLATE NOCASE,email`).all()).results;
+    const exs=(await env.DB.prepare(`SELECT id,chapter,code,title,sort_order FROM exercises ORDER BY chapter,sort_order,id`).all()).results;
+    const subs=(await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.status,s.final_score,s.submitted_at,s.validated_at,s.ai_result_json
+      FROM submissions s
+      JOIN (
+        SELECT user_id,exercise_id,MAX(id) AS max_id
+        FROM submissions GROUP BY user_id,exercise_id
+      ) latest ON latest.max_id=s.id
+      ORDER BY s.id DESC`).all()).results;
+    const drafts=(await env.DB.prepare(`SELECT user_id,exercise_id,updated_at FROM drafts`).all()).results;
+    return json({students,exercises:exs,submissions:subs,drafts});
+  }catch(e){return json({error:'No s’ha pogut carregar el seguiment.',detail:String(e?.message||e)},500)}
+ }
  if(path==='/api/teacher/submissions' && user?.role==='teacher'){const rows=await env.DB.prepare('SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at,u.name,e.code AS exercise_code,e.title FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id ORDER BY s.submitted_at DESC').all();return json({submissions:rows.results})}
  if(path.startsWith('/api/teacher/submissions/') && req.method==='DELETE' && user?.role==='teacher'){
   const id=Number(path.split('/').pop());
