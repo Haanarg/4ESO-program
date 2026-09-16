@@ -85,6 +85,13 @@ async function aiGrade(env, exercise, code, tests){
   let rubric=[];
   try{ rubric=JSON.parse(exercise.rubric_json||'[]'); }catch{}
   const normalizedTests=Array.isArray(tests)?tests:[];
+  // Separa el material proporcionat de la resposta en tasques d'investigació.
+  const researchMarkers=["##### Tasca d'Investigació","##### Tasca d’Investigació"];
+  const markerIndexes=researchMarkers.map(m=>code.indexOf(m)).filter(i=>i>=0);
+  const researchMarkerIndex=markerIndexes.length?Math.min(...markerIndexes):-1;
+  const isResearchTask=researchMarkerIndex>=0;
+  const studentAnswer=isResearchTask ? code.slice(researchMarkerIndex) : code;
+
   const prompt=`Ets un corrector pedagògic de Programació Python de 4t d'ESO.
 La teva feina és PROPOSAR una qualificació; la decisió final sempre és del professor.
 
@@ -118,7 +125,10 @@ SOLUCIÓ DE REFERÈNCIA (només orientativa; no la copiïs)
 ${exercise.reference_solution||''}
 
 CODI / RESPOSTA DE L'ALUMNE
-${code}`;
+${studentAnswer}
+
+NOTA SOBRE TASQUES D'INVESTIGACIÓ
+${isResearchTask ? "Aquesta és una tasca d'investigació. Avalua exclusivament el contingut a partir del marcador '##### Tasca d'Investigació'. Tot el contingut anterior al marcador és material proporcionat a l'alumne: no l'atribueixis a l'alumne ni li concedeixis punts per aquest contingut." : "No s'ha detectat el marcador de tasca d'investigació."}`;
 
   const schema={type:"object",properties:{
     score:{type:"number",minimum:0,maximum:10},
