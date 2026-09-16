@@ -1,4 +1,4 @@
-let user=null, exercises=[], current=null, py=null, studentPreview=false;
+let user=null, exercises=[], current=null, py=null, studentPreview=false, codeEditor=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -96,6 +96,20 @@ async function openExercise(id){
   current=await api(`/api/exercises/${id}`);
   let rubric=[]; try{rubric=JSON.parse(current.rubric_json||'[]')}catch{}
   $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner compact\"><strong>👁 Vista d\'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>':''}<div class="grid"><section class="card"><span class="pill">${esc(current.type)}</span><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul><button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card"><h2>Editor Python</h2><textarea id="code" spellcheck="false">${esc(current.starter_code)}</textarea><button onclick="runCode()">▶ Executar</button> <button onclick="submitCode()" ${studentPreview?'disabled title=\"Desactivat en la vista d’alumne del professor\"':''}>✓ Entregar</button>${studentPreview?'<p class=\"preview-note\">L’entrega està desactivada en mode de previsualització.</p>':''}<h3>Sortida</h3><div id="output" class="output"></div><div id="grade"></div></section></div>`;
+  codeEditor=CodeMirror.fromTextArea($('#code'),{
+    mode:{name:'python',version:3,singleLineStringErrors:false},
+    lineNumbers:true,
+    indentUnit:4,
+    tabSize:4,
+    indentWithTabs:false,
+    lineWrapping:false,
+    viewportMargin:Infinity,
+    autofocus:true,
+    extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}
+  });
+  codeEditor.setSize('100%','clamp(430px,58vh,680px)');
+  setTimeout(()=>codeEditor.refresh(),0);
+
 }
 async function loadPy(){
   if(py) return py;
@@ -112,7 +126,7 @@ function pythonWrapper(code, inputs){
 
 async function runCode(){
   try{
-    const p=await loadPy(); const code=$('#code').value;
+    const p=await loadPy(); const code=codeEditor?codeEditor.getValue():$('#code').value;
     if(/matplotlib/.test(code)) { $('#output').textContent='Carregant matplotlib…'; await p.loadPackage('matplotlib'); }
     const out=await p.runPythonAsync(pythonWrapper(code,inputValues()));
     $('#output').textContent=out[0]+(out[1]?`\n${out[1]}`:'');
@@ -159,7 +173,7 @@ async function submitCode(){
     return;
   }
   try{
-    const code=$('#code').value; const tests=await localTests(code);
+    const code=codeEditor?codeEditor.getValue():$('#code').value; const tests=await localTests(code);
     $('#output').textContent=tests.map((t,i)=>`${t.passed?'✓':'✗'} Test ${i+1}${t.detail?' — '+String(t.detail).trim():''}`).join('\n')||'Sense tests automàtics configurats';
     const d=await api(`/api/exercises/${current.id}/submissions`,{method:'POST',body:JSON.stringify({code,tests})});
     const ai=d.ai||{};
