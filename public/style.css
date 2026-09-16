@@ -148,3 +148,25 @@ main{max-width:1500px}
   .grid{grid-template-columns:1fr}
   .CodeMirror{height:480px}
 }
+
+/* Esborranys + editor ampliat */
+main{max-width:1720px}
+.grid{grid-template-columns:minmax(260px,.52fr) minmax(760px,1.95fr);gap:26px}
+.python-workspace{padding:24px!important}
+.editor-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:12px}
+.editor-heading h2{margin:0!important}
+.editor-actions{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 18px}
+.draft-status{font-size:12px;font-weight:750;padding:6px 9px;border-radius:8px;border:1px solid #30415b;color:#9fb0c8;background:#0a1321}
+.draft-status.saved{color:#86efac;border-color:rgba(134,239,172,.28);background:rgba(134,239,172,.06)}
+.draft-status.saving,.draft-status.pending-save{color:#fde68a;border-color:rgba(253,230,138,.24);background:rgba(253,230,138,.05)}
+.draft-status.save-error{color:#fca5a5;border-color:rgba(252,165,165,.28);background:rgba(252,165,165,.06)}
+.status.draft{color:#93c5fd;background:rgba(147,197,253,.08)}
+.CodeMirror{height:clamp(520px,68vh,820px);font-size:16px;line-height:1.7}
+.python-workspace .output{min-height:120px;max-height:280px}
+@media(max-width:1180px){
+  .grid{grid-template-columns:minmax(250px,.62fr) minmax(620px,1.65fr)}
+}
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr}
+  .CodeMirror{height:560px}
+}

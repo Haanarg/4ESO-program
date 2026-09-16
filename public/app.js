@@ -1,4 +1,4 @@
-let user=null, exercises=[], current=null, py=null, studentPreview=false, codeEditor=null;
+let user=null, exercises=[], current=null, py=null, studentPreview=false, codeEditor=null, draftTimer=null, draftSaving=false;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -72,10 +72,14 @@ async function dashboard(){
   const d=await api('/api/exercises'); exercises=d.exercises;
   const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
   $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner\"><strong>👁 Vista d\'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>':''}<h1>Programació 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes de criptografia, aventura de text i dades.</p><div id="list"></div>`;
-  const last={};
+  const last={}, drafts={};
   try{
     const s=await api('/api/my-submissions');
     for(const x of s.submissions) if(!last[x.exercise_id]) last[x.exercise_id]=x;
+    if(!studentPreview){
+      const dr=await api('/api/my-drafts');
+      for(const x of dr.drafts||[]) drafts[x.exercise_id]=x;
+    }
   }catch{}
   for(const chapter of Object.keys(chapterNames).map(Number)){
     const chapterExercises=exercises.filter(e=>e.chapter===chapter);
@@ -84,18 +88,24 @@ async function dashboard(){
     chapterExercises.forEach(e=>{
       const sub=last[e.id];
       const status=sub?.status==='returned'
-        ? ''
+        ? (drafts[e.id]?`<span class="status draft">💾 Esborrany desat</span>`:'')
         : sub?.final_score!=null
           ? `<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`
-          : sub?.ai_result_json ? `<span class="status pending">Proposta IA pendent de validació</span>` : '';
+          : sub?.ai_result_json ? `<span class="status pending">Proposta IA pendent de validació</span>`
+          : drafts[e.id]?`<span class="status draft">💾 Esborrany desat</span>`:'';
       $('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${e.id})"><span class="pill">${esc(e.type)}</span><h3>${esc(e.code)} · ${esc(e.title)}</h3><p>${esc(e.statement.slice(0,220))}${e.statement.length>220?'…':''}</p>${status}</div>`);
     });
   }
 }
 async function openExercise(id){
+  if(draftTimer){clearTimeout(draftTimer);draftTimer=null}
   current=await api(`/api/exercises/${id}`);
+  let savedDraft=null;
+  if(!studentPreview){
+    try{ savedDraft=(await api(`/api/exercises/${id}/draft`)).draft; }catch{}
+  }
   let rubric=[]; try{rubric=JSON.parse(current.rubric_json||'[]')}catch{}
-  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner compact\"><strong>👁 Vista d\'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>':''}<div class="grid"><section class="card"><span class="pill">${esc(current.type)}</span><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul><button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card"><h2>Editor Python</h2><textarea id="code" spellcheck="false">${esc(current.starter_code)}</textarea><button onclick="runCode()">▶ Executar</button> <button onclick="submitCode()" ${studentPreview?'disabled title=\"Desactivat en la vista d’alumne del professor\"':''}>✓ Entregar</button>${studentPreview?'<p class=\"preview-note\">L’entrega està desactivada en mode de previsualització.</p>':''}<h3>Sortida</h3><div id="output" class="output"></div><div id="grade"></div></section></div>`;
+  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner compact\"><strong>👁 Vista d\'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>':''}<div class="grid"><section class="card"><span class="pill">${esc(current.type)}</span><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul><button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace"><div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${savedDraft?'✓ Esborrany recuperat':'Encara no desat'}</span>`}</div><textarea id="code" spellcheck="false">${esc(savedDraft?.code ?? current.starter_code)}</textarea><div class="editor-actions"><button onclick="runCode()">▶ Executar</button> ${studentPreview?'':`<button class="secondary" onclick="saveDraft(true)">💾 Desa esborrany</button>`} <button onclick="submitCode()" ${studentPreview?'disabled title=\"Desactivat en la vista d’alumne del professor\"':''}>✓ Entregar</button></div>${studentPreview?'<p class=\"preview-note\">L’entrega està desactivada en mode de previsualització.</p>':''}<h3>Sortida</h3><div id="output" class="output"></div><div id="grade"></div></section></div>`;
   codeEditor=CodeMirror.fromTextArea($('#code'),{
     mode:{name:'python',version:3,singleLineStringErrors:false},
     lineNumbers:true,
@@ -107,9 +117,33 @@ async function openExercise(id){
     autofocus:true,
     extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}
   });
-  codeEditor.setSize('100%','clamp(430px,58vh,680px)');
+  codeEditor.setSize('100%','clamp(520px,68vh,820px)');
+  if(!studentPreview){
+    codeEditor.on('change',()=>{
+      const st=$('#draft-status');
+      if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}
+      if(draftTimer) clearTimeout(draftTimer);
+      draftTimer=setTimeout(()=>saveDraft(false),1800);
+    });
+  }
   setTimeout(()=>codeEditor.refresh(),0);
 
+}
+
+async function saveDraft(manual=false){
+  if(studentPreview || !current || !codeEditor || draftSaving) return;
+  if(draftTimer){clearTimeout(draftTimer);draftTimer=null}
+  draftSaving=true;
+  const st=$('#draft-status');
+  if(st){st.textContent='Desant…';st.className='draft-status saving'}
+  try{
+    const d=await api(`/api/exercises/${current.id}/draft`,{method:'PUT',body:JSON.stringify({code:codeEditor.getValue()})});
+    const time=new Date().toLocaleTimeString('ca-ES',{hour:'2-digit',minute:'2-digit'});
+    if(st){st.textContent=`✓ Esborrany desat · ${time}`;st.className='draft-status saved'}
+  }catch(e){
+    if(st){st.textContent='⚠ No s’ha pogut desar';st.className='draft-status save-error';st.title=e.message}
+    if(manual) alert(`No s'ha pogut desar l'esborrany: ${e.message}`);
+  }finally{draftSaving=false}
 }
 async function loadPy(){
   if(py) return py;
@@ -173,6 +207,7 @@ async function submitCode(){
     return;
   }
   try{
+    if(draftTimer){clearTimeout(draftTimer);draftTimer=null}
     const code=codeEditor?codeEditor.getValue():$('#code').value; const tests=await localTests(code);
     $('#output').textContent=tests.map((t,i)=>`${t.passed?'✓':'✗'} Test ${i+1}${t.detail?' — '+String(t.detail).trim():''}`).join('\n')||'Sense tests automàtics configurats';
     const d=await api(`/api/exercises/${current.id}/submissions`,{method:'POST',body:JSON.stringify({code,tests})});
