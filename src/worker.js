@@ -239,6 +239,30 @@ async function api(req,env){
  if(path.startsWith('/api/exercises/') && req.method==='GET'){const id=path.split('/').pop(); const e=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json,tests_json FROM exercises WHERE id=?').bind(id).first(); return e?json(e):json({error:'No trobat'},404)}
  if(path.startsWith('/api/exercises/') && path.endsWith('/submissions') && req.method==='POST'){if(!user)return json({error:'Cal iniciar sessió.'},401);const id=path.split('/')[3];const e=await env.DB.prepare('SELECT * FROM exercises WHERE id=?').bind(id).first();if(!e)return json({error:'Exercici no trobat'},404);const b=await req.json();const code=String(b.code||'').slice(0,30000);const ai=await aiGrade(env,e,code,b.tests||[]);const result=await env.DB.prepare('INSERT INTO submissions(user_id,exercise_id,code,test_results_json,ai_result_json,status) VALUES(?,?,?,?,?,?) RETURNING id,submitted_at').bind(user.id,e.id,code,JSON.stringify(b.tests||[]),JSON.stringify(ai),'pending').first();try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=? AND exercise_id=?').bind(user.id,e.id).run();}catch{}return json({submission:result,ai})}
  if(path==='/api/my-submissions' && user){const rows=await env.DB.prepare('SELECT s.*,e.code,e.title FROM submissions s JOIN exercises e ON e.id=s.exercise_id WHERE s.user_id=? ORDER BY s.submitted_at DESC').bind(user.id).all();return json({submissions:rows.results})}
+ if(/^\/api\/teacher\/students\/\d+$/.test(path) && req.method==='PUT' && user?.role==='teacher'){
+  const id=Number(path.split('/').pop());
+  const student=await env.DB.prepare(`SELECT id,name,email,role FROM users WHERE id=?`).bind(id).first();
+  if(!student || student.role!=='student') return json({error:'Alumne no trobat.'},404);
+  const b=await req.json();
+  const name=String(b.name||'').trim().slice(0,120);
+  const email=String(b.email||'').trim().toLowerCase().slice(0,254);
+  if(!name) return json({error:'El nom no pot estar buit.'},400);
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({error:'El correu no és vàlid.'},400);
+  const duplicate=await env.DB.prepare(`SELECT id FROM users WHERE email=? AND id<>?`).bind(email,id).first();
+  if(duplicate) return json({error:'Aquest correu ja està registrat per un altre usuari.'},409);
+  await env.DB.prepare(`UPDATE users SET name=?,email=? WHERE id=? AND role='student'`).bind(name,email,id).run();
+  return json({ok:true,student:{id,name,email}});
+ }
+ if(/^\/api\/teacher\/students\/\d+$/.test(path) && req.method==='DELETE' && user?.role==='teacher'){
+  const id=Number(path.split('/').pop());
+  const student=await env.DB.prepare(`SELECT id,name,email,role FROM users WHERE id=?`).bind(id).first();
+  if(!student || student.role!=='student') return json({error:'Alumne no trobat.'},404);
+  try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=?').bind(id).run();}catch{}
+  await env.DB.prepare('DELETE FROM submissions WHERE user_id=?').bind(id).run();
+  await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
+  await env.DB.prepare(`DELETE FROM users WHERE id=? AND role='student'`).bind(id).run();
+  return json({ok:true,deleted:id});
+ }
  if(path==='/api/teacher/progress' && user?.role==='teacher'){
   try{
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS drafts(

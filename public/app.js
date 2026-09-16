@@ -56,6 +56,50 @@ async function logout(){
 }
 
 
+
+function editStudent(student){
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay';
+  overlay.innerHTML=`<div class="student-modal card">
+    <div class="modal-title"><div><h2>Editar alumne</h2><p class="muted">Modifica el nom o el correu del compte.</p></div><button class="modal-close" aria-label="Tancar">×</button></div>
+    <label>Nom<input id="edit-student-name" type="text" maxlength="120" value="${esc(student.name)}"></label>
+    <label>Correu electrònic<input id="edit-student-email" type="email" maxlength="254" value="${esc(student.email)}"></label>
+    <div id="edit-student-error" class="form-error"></div>
+    <div class="modal-actions"><button class="secondary modal-cancel">Cancel·la</button><button id="save-student-btn">✓ Desa els canvis</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.querySelector('.modal-close').onclick=close;
+  overlay.querySelector('.modal-cancel').onclick=close;
+  overlay.onclick=e=>{if(e.target===overlay)close()};
+  overlay.querySelector('#edit-student-name').focus();
+  overlay.querySelector('#save-student-btn').onclick=async()=>{
+    const name=overlay.querySelector('#edit-student-name').value.trim();
+    const email=overlay.querySelector('#edit-student-email').value.trim();
+    const err=overlay.querySelector('#edit-student-error');
+    const btn=overlay.querySelector('#save-student-btn');
+    err.textContent='';
+    if(!name){err.textContent='Escriu el nom de l’alumne.';return}
+    if(!email){err.textContent='Escriu el correu de l’alumne.';return}
+    btn.disabled=true;btn.textContent='Desant…';
+    try{
+      await api(`/api/teacher/students/${student.id}`,{method:'PUT',body:JSON.stringify({name,email})});
+      close();await teacherProgress();
+    }catch(e){err.textContent=e.message;btn.disabled=false;btn.textContent='✓ Desa els canvis'}
+  };
+}
+
+async function deleteStudent(id,name){
+  const ok=confirm(`Vols eliminar definitivament l'alumne "${name}"?\n\nS'eliminaran també totes les seves entregues, notes, esborranys i sessions. Aquesta acció no es pot desfer.`);
+  if(!ok)return;
+  const second=confirm(`Confirmació final:\n\nEliminar "${name}" i tot el seu historial de Programació 4ESO?`);
+  if(!second)return;
+  try{
+    await api(`/api/teacher/students/${id}`,{method:'DELETE'});
+    await teacherProgress();
+  }catch(e){alert(`No s'ha pogut eliminar l'alumne: ${e.message}`)}
+}
+
 async function teacherProgress(){
   const d=await api('/api/teacher/progress');
   const students=d.students||[], exs=d.exercises||[], subs=d.submissions||[], drafts=d.drafts||[];
@@ -101,7 +145,7 @@ async function teacherProgress(){
           </tr></thead>
           <tbody>
             ${students.map(st=>`<tr>
-              <th class="student-col"><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></th>
+              <th class="student-col"><div class="student-identity"><div><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></div><div class="student-row-actions"><button class="mini-btn" title="Editar alumne" onclick='editStudent(${JSON.stringify(st)})'>✏ Edita</button><button class="mini-btn delete-student-btn" title="Eliminar alumne" onclick='deleteStudent(${st.id},${JSON.stringify(st.name)})'>🗑</button></div></div></th>
               <td class="summary-col"><strong>${completedFor(st)}/${exs.length}</strong></td>
               ${exs.map(e=>`<td>${cell(st,e)}</td>`).join('')}
             </tr>`).join('') || `<tr><td colspan="${exs.length+2}">Encara no hi ha alumnes registrats.</td></tr>`}
