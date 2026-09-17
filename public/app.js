@@ -174,6 +174,38 @@ function exitStudentPreview(){
   teacherDashboard();
 }
 
+
+function inlineTheory(s){
+  return esc(s)
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g,'<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,'<span class="theory-link">$1</span>');
+}
+function renderTheory(md){
+  const lines=String(md||'').split(/\r?\n/); let h='',inCode=false,code=[],inUl=false,inOl=false,inTable=false,table=[];
+  const closeLists=()=>{if(inUl){h+='</ul>';inUl=false}if(inOl){h+='</ol>';inOl=false}};
+  const flushTable=()=>{if(!inTable)return;const rows=table.filter(r=>!r.every(x=>/^:?-+:?$/.test(x.trim())));if(rows.length){h+='<div class="theory-table-wrap"><table class="theory-table">';rows.forEach((r,i)=>{h+=`<tr>${r.map(x=>`<${i===0?'th':'td'}>${inlineTheory(x.trim())}</${i===0?'th':'td'}>`).join('')}</tr>`});h+='</table></div>'}table=[];inTable=false};
+  for(const line of lines){
+    if(line.trim().startsWith('```')){flushTable();closeLists();if(!inCode){inCode=true;code=[]}else{h+=`<pre class="theory-code"><code>${esc(code.join('\n'))}</code></pre>`;inCode=false}continue}
+    if(inCode){code.push(line);continue}
+    if(/^\s*\|.*\|\s*$/.test(line)){closeLists();inTable=true;table.push(line.trim().slice(1,-1).split('|'));continue}else flushTable();
+    const m=line.match(/^(#{1,4})\s+(.*)$/);if(m){closeLists();const level=Math.min(4,m[1].length+1);h+=`<h${level}>${inlineTheory(m[2])}</h${level}>`;continue}
+    const ul=line.match(/^\s*[-*]\s+(.*)$/);if(ul){if(inOl){h+='</ol>';inOl=false}if(!inUl){h+='<ul>';inUl=true}h+=`<li>${inlineTheory(ul[1])}</li>`;continue}
+    const ol=line.match(/^\s*\d+\.\s+(.*)$/);if(ol){if(inUl){h+='</ul>';inUl=false}if(!inOl){h+='<ol>';inOl=true}h+=`<li>${inlineTheory(ol[1])}</li>`;continue}
+    closeLists(); if(!line.trim()){h+='<div class="theory-space"></div>';continue}
+    if(/^---+$/.test(line.trim())){h+='<hr>';continue}
+    h+=`<p>${inlineTheory(line.trim())}</p>`;
+  }
+  flushTable();closeLists();if(inCode)h+=`<pre class="theory-code"><code>${esc(code.join('\n'))}</code></pre>`;return h;
+}
+function openTheory(chapter){
+ const names={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
+ const md=COURSE_THEORY?.[chapter]||COURSE_THEORY?.[String(chapter)]||'';
+ $('#app').innerHTML=`${studentPreview?`<div class="preview-banner compact"><strong>👁 Vista d'alumne</strong><button class="secondary" onclick="exitStudentPreview()">← Panell professor</button></div>`:''}<article class="card theory-page"><div class="theory-eyebrow">📖 Teoria · Capítol ${chapter}</div><div class="theory-content">${renderTheory(md)}</div><div class="theory-footer"><button class="secondary" onclick="dashboard()">← Índex del curs</button><button onclick="openFirstExercise(${chapter})">Comença els exercicis →</button></div></article>`;
+ window.scrollTo({top:0,behavior:'smooth'});
+}
+function openFirstExercise(chapter){const e=exercises.find(x=>x.chapter===chapter);if(e)openExercise(e.id);else dashboard()}
 async function dashboard(){
  const d=await api('/api/exercises'); exercises=d.exercises;
  const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
@@ -185,6 +217,7 @@ async function dashboard(){
  for(const chapter of Object.keys(chapterNames).map(Number)){
   const ce=exercises.filter(x=>x.chapter===chapter);if(!ce.length)continue;const cd=ce.filter(done).length,symbol=cd===ce.length?'✓':cd?'●':'○';
   $('#list').insertAdjacentHTML('beforeend',`<h2 class="chapter-title"><span>${symbol} Capítol ${chapter}: ${esc(chapterNames[chapter])}</span><small>${cd}/${ce.length}</small></h2>`);
+  $('#list').insertAdjacentHTML('beforeend',`<div class="card theory-card" onclick="openTheory(${chapter})"><div class="theory-card-icon">📖</div><div><span class="pill theory-pill">TEORIA</span><h3>Teoria · ${esc(chapterNames[chapter])}</h3><p>Conceptes, explicacions i exemples del curs original abans de començar els exercicis.</p></div><span class="theory-arrow">→</span></div>`);
   ce.forEach(x=>{const sub=last[x.id];const status=sub?.status==='returned'?(drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'<span class="status returned">↩ Retornada</span>'):sub?.final_score!=null?`<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`:sub?.ai_result_json?'<span class="status pending">Pendent de validació</span>':drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'';const note=sub?.teacher_comment?`<div class="dashboard-teacher-note">💬 ${esc(sub.teacher_comment)}</div>`:'';$('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${x.id})"><span class="pill">${esc(x.type)}</span><h3>${esc(x.code)} · ${esc(x.title)}</h3><p>${esc(x.statement.slice(0,220))}${x.statement.length>220?'…':''}</p>${status}${note}</div>`);});
  }
 }
