@@ -100,6 +100,12 @@ async function deleteStudent(id,name){
   }catch(e){alert(`No s'ha pogut eliminar l'alumne: ${e.message}`)}
 }
 
+function filterProgressChapter(){const v=$('#progress-chapter')?.value||'all';document.querySelectorAll('.progress-table [data-chapter]').forEach(x=>x.style.display=(v==='all'||x.dataset.chapter===v)?'':'none')}
+async function teacherStudentDetail(id){
+ const d=await api(`/api/teacher/students/${id}/progress`),{student,exercises:exs,submissions:subs,drafts}=d,byEx={};for(const s of subs)(byEx[s.exercise_id]??=[]).push(s);
+ const val=subs.filter(s=>s.status==='validated'&&s.final_score!=null),avg=val.length?(val.reduce((x,s)=>x+Number(s.final_score),0)/val.length).toFixed(1):'—',chs=[...new Set(exs.map(e=>e.chapter))];
+ $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${n!=null?esc(n)+'/10':'—'}</strong><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
+}
 async function teacherProgress(){
   const d=await api('/api/teacher/progress');
   const students=d.students||[], exs=d.exercises||[], subs=d.submissions||[], drafts=d.drafts||[];
@@ -126,7 +132,7 @@ async function teacherProgress(){
   $('#app').innerHTML=`
     <section class="card progress-card">
       <div class="progress-toolbar">
-        <div><h1>Seguiment dels alumnes</h1><p class="muted">Darrera situació de cada tasca. Les xifres són les notes validades pel professor.</p></div>
+        <div><h1>Seguiment dels alumnes</h1><p class="muted">Darrera situació de cada tasca. Clica un alumne per veure'n la fitxa completa.</p></div>
         <button class="secondary" onclick="teacherDashboard()">← Panell professor</button>
       </div>
       <div class="progress-legend">
@@ -136,18 +142,18 @@ async function teacherProgress(){
         <span>Esborrany = encara no entregada</span>
         <span>— = no iniciada</span>
       </div>
-      <div class="progress-table-wrap">
+      <div class="progress-filters"><label>Capítol <select id="progress-chapter" onchange="filterProgressChapter()"><option value="all">Tots</option>${[...new Set(exs.map(e=>e.chapter))].map(c=>`<option value="${c}">${c}</option>`).join('')}</select></label></div><div class="progress-table-wrap">
         <table class="progress-table">
           <thead><tr>
             <th class="student-col">Alumne</th>
             <th class="summary-col">Fetes</th>
-            ${exs.map(e=>`<th title="${esc(e.title)}"><span>${esc(e.code)}</span><small>${esc(e.title)}</small></th>`).join('')}
+            ${exs.map(e=>`<th data-chapter="${e.chapter}" title="${esc(e.title)}"><span>${esc(e.code)}</span><small>${esc(e.title)}</small></th>`).join('')}
           </tr></thead>
           <tbody>
             ${students.map(st=>`<tr>
-              <th class="student-col"><div class="student-identity"><div><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></div><div class="student-row-actions"><button class="mini-btn" title="Editar alumne" onclick='editStudent(${JSON.stringify(st)})'>✏ Edita</button><button class="mini-btn delete-student-btn" title="Eliminar alumne" onclick='deleteStudent(${st.id},${JSON.stringify(st.name)})'>🗑</button></div></div></th>
+              <th class="student-col"><div class="student-identity"><div class="student-open" onclick="teacherStudentDetail(${st.id})"><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></div><div class="student-row-actions"><button class="mini-btn" title="Editar alumne" onclick='editStudent(${JSON.stringify(st)})'>✏ Edita</button><button class="mini-btn delete-student-btn" title="Eliminar alumne" onclick='deleteStudent(${st.id},${JSON.stringify(st.name)})'>🗑</button></div></div></th>
               <td class="summary-col"><strong>${completedFor(st)}/${exs.length}</strong></td>
-              ${exs.map(e=>`<td>${cell(st,e)}</td>`).join('')}
+              ${exs.map(e=>`<td data-chapter="${e.chapter}">${cell(st,e)}</td>`).join('')}
             </tr>`).join('') || `<tr><td colspan="${exs.length+2}">Encara no hi ha alumnes registrats.</td></tr>`}
           </tbody>
         </table>
@@ -169,67 +175,31 @@ function exitStudentPreview(){
 }
 
 async function dashboard(){
-  const d=await api('/api/exercises'); exercises=d.exercises;
-  const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
-  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner\"><strong>👁 Vista d\'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>':''}<h1>Programació 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes de criptografia, aventura de text i dades.</p><div id="list"></div>`;
-  const last={}, drafts={};
-  try{
-    const s=await api('/api/my-submissions');
-    for(const x of s.submissions) if(!last[x.exercise_id]) last[x.exercise_id]=x;
-    if(!studentPreview){
-      const dr=await api('/api/my-drafts');
-      for(const x of dr.drafts||[]) drafts[x.exercise_id]=x;
-    }
-  }catch{}
-  for(const chapter of Object.keys(chapterNames).map(Number)){
-    const chapterExercises=exercises.filter(e=>e.chapter===chapter);
-    if(!chapterExercises.length) continue;
-    $('#list').insertAdjacentHTML('beforeend',`<h2 class="chapter-title">Capítol ${chapter}: ${esc(chapterNames[chapter])}</h2>`);
-    chapterExercises.forEach(e=>{
-      const sub=last[e.id];
-      const status=sub?.status==='returned'
-        ? (drafts[e.id]?`<span class="status draft">💾 Esborrany desat</span>`:'')
-        : sub?.final_score!=null
-          ? `<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`
-          : sub?.ai_result_json ? `<span class="status pending">Proposta IA pendent de validació</span>`
-          : drafts[e.id]?`<span class="status draft">💾 Esborrany desat</span>`:'';
-      $('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${e.id})"><span class="pill">${esc(e.type)}</span><h3>${esc(e.code)} · ${esc(e.title)}</h3><p>${esc(e.statement.slice(0,220))}${e.statement.length>220?'…':''}</p>${status}</div>`);
-    });
-  }
+ const d=await api('/api/exercises'); exercises=d.exercises;
+ const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
+ const last={},drafts={};
+ try{const x=await api('/api/my-submissions');for(const s of x.submissions)if(!last[s.exercise_id])last[s.exercise_id]=s;if(!studentPreview){const dr=await api('/api/my-drafts');for(const x of dr.drafts||[])drafts[x.exercise_id]=x}}catch{}
+ const done=e=>last[e.id]?.status==='validated'&&last[e.id]?.final_score!=null;
+ const n=exercises.filter(done).length,pct=exercises.length?Math.round(n*100/exercises.length):0;
+ $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner\"><strong>👁 Vista d'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>":''}<div class="course-heading"><div><h1>Programació 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes finals.</p></div><strong>${n}/${exercises.length} tasques · ${pct}%</strong></div><div class="course-progress"><span style="width:${pct}%"></span></div><div id="list"></div>`;
+ for(const chapter of Object.keys(chapterNames).map(Number)){
+  const ce=exercises.filter(x=>x.chapter===chapter);if(!ce.length)continue;const cd=ce.filter(done).length,symbol=cd===ce.length?'✓':cd?'●':'○';
+  $('#list').insertAdjacentHTML('beforeend',`<h2 class="chapter-title"><span>${symbol} Capítol ${chapter}: ${esc(chapterNames[chapter])}</span><small>${cd}/${ce.length}</small></h2>`);
+  ce.forEach(x=>{const sub=last[x.id];const status=sub?.status==='returned'?(drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'<span class="status returned">↩ Retornada</span>'):sub?.final_score!=null?`<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`:sub?.ai_result_json?'<span class="status pending">Pendent de validació</span>':drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'';const note=sub?.teacher_comment?`<div class="dashboard-teacher-note">💬 ${esc(sub.teacher_comment)}</div>`:'';$('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${x.id})"><span class="pill">${esc(x.type)}</span><h3>${esc(x.code)} · ${esc(x.title)}</h3><p>${esc(x.statement.slice(0,220))}${x.statement.length>220?'…':''}</p>${status}${note}</div>`);});
+ }
 }
 async function openExercise(id){
-  if(draftTimer){clearTimeout(draftTimer);draftTimer=null}
-  current=await api(`/api/exercises/${id}`);
-  let savedDraft=null;
-  if(!studentPreview){
-    try{ savedDraft=(await api(`/api/exercises/${id}/draft`)).draft; }catch{}
-  }
-  let rubric=[]; try{rubric=JSON.parse(current.rubric_json||'[]')}catch{}
-  $('#app').innerHTML=`${studentPreview?'<div class=\"preview-banner compact\"><strong>👁 Vista d\'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>':''}<div class="grid"><section class="card"><span class="pill">${esc(current.type)}</span><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul><button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace"><div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${savedDraft?'✓ Esborrany recuperat':'Encara no desat'}</span>`}</div><textarea id="code" spellcheck="false">${esc(savedDraft?.code ?? current.starter_code)}</textarea><div class="editor-actions"><button onclick="runCode()">▶ Executar</button> ${studentPreview?'':`<button class="secondary" onclick="saveDraft(true)">💾 Desa esborrany</button>`} <button onclick="submitCode()" ${studentPreview?'disabled title=\"Desactivat en la vista d’alumne del professor\"':''}>✓ Entregar</button></div>${studentPreview?'<p class=\"preview-note\">L’entrega està desactivada en mode de previsualització.</p>':''}<h3>Sortida</h3><div id="output" class="output"></div><div id="grade"></div></section></div>`;
-  codeEditor=CodeMirror.fromTextArea($('#code'),{
-    mode:{name:'python',version:3,singleLineStringErrors:false},
-    lineNumbers:true,
-    indentUnit:4,
-    tabSize:4,
-    indentWithTabs:false,
-    lineWrapping:false,
-    viewportMargin:Infinity,
-    autofocus:true,
-    extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}
-  });
-  codeEditor.setSize('100%','clamp(520px,68vh,820px)');
-  if(!studentPreview){
-    codeEditor.on('change',()=>{
-      const st=$('#draft-status');
-      if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}
-      if(draftTimer) clearTimeout(draftTimer);
-      draftTimer=setTimeout(()=>saveDraft(false),1800);
-    });
-  }
-  setTimeout(()=>codeEditor.refresh(),0);
-
+ if(draftTimer){clearTimeout(draftTimer);draftTimer=null} current=await api(`/api/exercises/${id}`);
+ let savedDraft=null,history=[];if(!studentPreview){try{savedDraft=(await api(`/api/exercises/${id}/draft`)).draft}catch{}try{history=(await api('/api/my-submissions')).submissions.filter(s=>s.exercise_id===id)}catch{}}
+ let rubric=[];try{rubric=JSON.parse(current.rubric_json||'[]')}catch{}
+ const attempts=history.map((s,i)=>{const n=s.final_score??s.returned_score,state=s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent';return `<div class="attempt-row"><span>Intent ${history.length-i}</span><strong>${n!=null?esc(n)+'/10':'—'}</strong><span>${state}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('');
+ $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace"><div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div><textarea id="code" spellcheck="false">${esc(savedDraft?.code??current.starter_code)}</textarea><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button class="submit-final" onclick="submitCode()" ${studentPreview?'disabled':''}>✓ Entregar</button></div><div class="output-heading"><h3>Sortida</h3><small>La pots redimensionar verticalment</small></div><div id="output" class="output resizable-output"></div><div id="grade"></div></section></div>`;
+ codeEditor=CodeMirror.fromTextArea($('#code'),{mode:{name:'python',version:3,singleLineStringErrors:false},lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,lineWrapping:false,viewportMargin:Infinity,autofocus:true,extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}});
+ codeEditor.setSize('100%','clamp(540px,70vh,860px)');
+ if(!studentPreview)codeEditor.on('change',()=>{const st=$('#draft-status');if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}if(draftTimer)clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft(false),1800)});
+ setTimeout(()=>codeEditor.refresh(),0);
 }
-
+function toggleStatement(){const l=$('#exercise-layout'),p=$('#statement-panel'),b=$('.collapse-statement');const h=l.classList.toggle('statement-collapsed');p.classList.toggle('collapsed',h);b.textContent=h?'Enunciat ▶':'◀ Amaga enunciat';setTimeout(()=>codeEditor?.refresh(),80)}
 async function saveDraft(manual=false){
   if(studentPreview || !current || !codeEditor || draftSaving) return;
   if(draftTimer){clearTimeout(draftTimer);draftTimer=null}
@@ -326,17 +296,18 @@ async function submitCode(){
   }catch(e){ $('#grade').innerHTML=`<p class="error">${esc(e.message)}</p>`; }
 }
 
+function filterTeacher(status,btn){document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));btn?.classList.add('active');document.querySelectorAll('.submission[data-status]').forEach(x=>x.style.display=(status==='all'||x.dataset.status===status)?'':'none')}
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues i valida la nota final.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div id="teacher-list"></div>`;
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues i valida la nota final.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn active" onclick="filterTeacher(\'all\',this)">Totes</button><button class="filter-btn" onclick="filterTeacher(\'pending\',this)">Només pendents</button><button class="filter-btn" onclick="filterTeacher(\'returned\',this)">Retornades</button><button class="filter-btn" onclick="filterTeacher(\'validated\',this)">Validades</button></div><div id="teacher-list"></div>`;
     if(!d.submissions.length){ $('#teacher-list').innerHTML='<div class="card"><p>Encara no hi ha entregues.</p></div>'; return; }
     for(const s of d.submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
       const validated=s.status==='validated';
       const returned=s.status==='returned';
       const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':'Pendent';
-      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback per a l'alumne</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<h4>Rúbrica proposada</h4><div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</details><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(ai.score??''))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑 Eliminar</button>`}</div></article>`);
+      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}" data-status="${returned?'returned':validated?'validated':'pending'}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback per a l'alumne</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<h4>Rúbrica proposada</h4><div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</details><div class="teacher-comment-box"><label>Comentari del professor</label><textarea id="comment-${s.id}" placeholder="Comentari opcional que veurà l\'alumne" ${returned?'disabled':''}>${esc(s.teacher_comment||'')}</textarea></div><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(s.returned_score!=null?s.returned_score:(ai.score??'')))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑 Eliminar</button>`}</div></article>`);
     }
   }catch(e){ $('#app').innerHTML=`<div class="card"><h1>Panell del professor</h1><p class="error">${esc(e.message)}</p></div>`; }
 }
@@ -344,7 +315,7 @@ async function teacherDashboard(){
 async function validateSubmission(id){
   const input=$(`#score-${id}`); const score=Number(input.value);
   if(!Number.isFinite(score)||score<0||score>10){ alert('La nota ha de ser entre 0 i 10.'); return; }
-  try{ await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({score})}); await teacherDashboard(); }
+  const comment=$(`#comment-${id}`)?.value||''; try{ await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({score,comment})}); await teacherDashboard(); }
   catch(e){ alert(e.message); }
 }
 
@@ -361,7 +332,7 @@ async function returnSubmission(id){
   const ok=confirm("Vols retornar aquesta entrega?\n\nL'intent es conservarà a l'historial i l'exercici tornarà a aparèixer com a no fet perquè l'alumne el pugui repetir.");
   if(!ok) return;
   try{
-    await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({action:'return'})});
+    const score=Number($(`#score-${id}`)?.value),comment=$(`#comment-${id}`)?.value||''; await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({action:'return',score:Number.isFinite(score)?score:null,comment})});
     await teacherDashboard();
   }catch(e){ alert(e.message); }
 }
