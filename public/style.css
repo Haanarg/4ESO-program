@@ -240,3 +240,27 @@ main{max-width:1720px}
 .theory-table-wrap{overflow-x:auto;margin:14px 0 22px;border:1px solid #22344b;border-radius:11px}.theory-table{border-collapse:collapse;width:100%;min-width:600px}.theory-table th,.theory-table td{padding:11px 13px;text-align:left;vertical-align:top;border-bottom:1px solid #1c2b3e;border-right:1px solid #1c2b3e}.theory-table th{background:#0c1726;color:#eaf4ff}.theory-table tr:last-child td{border-bottom:0}
 .theory-space{height:4px}.theory-content hr{border:0;border-top:1px solid #223149;margin:28px 0}.theory-link{color:#8fa3bd;text-decoration:underline;text-decoration-style:dotted}.theory-footer{display:flex;justify-content:space-between;gap:12px;align-items:center;border-top:1px solid #223149;margin-top:36px;padding-top:22px}
 @media(max-width:700px){.theory-card{grid-template-columns:auto 1fr}.theory-arrow{display:none}.theory-footer{flex-direction:column-reverse;align-items:stretch}.theory-footer button{width:100%}}
+
+/* Títols de capítol més destacats a la vista d'alumne */
+.chapter-title{
+  font-size:clamp(28px,3vw,40px)!important;
+  line-height:1.12;
+  margin-top:44px!important;
+  margin-bottom:18px!important;
+  letter-spacing:-0.025em;
+}
+.chapter-title > span{
+  font-size:inherit;
+  font-weight:850;
+}
+.chapter-title > small{
+  font-size:15px!important;
+  font-weight:700;
+  letter-spacing:0;
+}
+@media(max-width:700px){
+  .chapter-title{
+    font-size:clamp(24px,7vw,32px)!important;
+    margin-top:34px!important;
+  }
+}
