@@ -353,3 +353,44 @@ main{max-width:1720px}
   .compact-review-grid{grid-template-columns:1fr!important}
   .compact-code pre{min-height:300px}
 }
+
+/* Botó d'enunciat sempre visible al panell del professor */
+.compact-submission-main{
+  grid-template-columns:145px minmax(220px,1fr) 145px auto 64px!important;
+}
+.statement-btn{
+  min-height:32px!important;
+  padding:6px 9px!important;
+  font-size:11px!important;
+  white-space:nowrap;
+}
+.teacher-statement-panel{
+  margin:0;
+  padding:14px 16px;
+  border-top:1px solid #294158;
+  border-bottom:1px solid #294158;
+  background:#091523;
+}
+.teacher-statement-panel[hidden]{display:none!important}
+.teacher-statement-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.teacher-statement-panel p{
+  margin:0 0 12px;
+  white-space:pre-wrap;
+  font-size:13px;
+  line-height:1.6;
+}
+.teacher-statement-panel h4{margin:12px 0 6px}
+.teacher-statement-panel ul{margin:0;padding-left:21px;font-size:12px;line-height:1.55}
+@media(max-width:1000px){
+  .compact-submission-main{grid-template-columns:1fr auto auto!important}
+  .compact-student{grid-column:1/-1}
+  .compact-date{display:none}
+  .statement-btn{grid-column:2}
+  .compact-score{grid-column:3!important;grid-row:1!important}
+}

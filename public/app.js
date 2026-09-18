@@ -357,6 +357,11 @@ function filterTeacher(status,btn){
   if(empty) empty.hidden=visible!==0;
 }
 
+function toggleTeacherStatement(id){
+  const box=$(`#statement-${id}`);
+  if(box) box.hidden=!box.hidden;
+}
+
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
@@ -375,11 +380,17 @@ async function teacherDashboard(){
           <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span></div>
           <div class="compact-student"><strong>${esc(s.name)}</strong><span>${esc(s.title)}</span></div>
           <small class="compact-date">${esc(s.submitted_at)}</small>
+          <button class="statement-btn secondary" onclick="event.stopPropagation();toggleTeacherStatement(${s.id})">📋 Enunciat</button>
           <div class="score compact-score">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}<small>/10</small></div>
+        </div>
+        <div id="statement-${s.id}" class="teacher-statement-panel" hidden>
+          <div class="teacher-statement-head"><strong>📋 ${esc(s.exercise_code)} · Enunciat i criteris</strong><button class="secondary mini-btn" onclick="toggleTeacherStatement(${s.id})">Tanca</button></div>
+          <p>${esc(s.statement||'')}</p>
+          ${(()=>{let r=[];try{r=JSON.parse(s.rubric_json||'[]')}catch{}return r.length?`<h4>Criteris d'avaluació</h4><ul>${r.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>`:''})()}
         </div>
         <details class="compact-review">
           <summary>Corregir</summary>
-          <details class="teacher-statement"><summary>📋 Veure enunciat i criteris</summary><div class="teacher-statement-body"><p>${esc(s.statement||'')}</p>${(()=>{let r=[];try{r=JSON.parse(s.rubric_json||'[]')}catch{}return r.length?`<h4>Criteris d'avaluació</h4><ul>${r.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>`:''})()}</div></details>
+          
           <div class="compact-review-grid">
             <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
             <div class="compact-ai"><h4>Correcció IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</div>
