@@ -313,7 +313,7 @@ async function api(req,env){
  }
  if(path==='/api/teacher/submissions' && user?.role==='teacher'){
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS submission_feedback(submission_id INTEGER PRIMARY KEY,teacher_comment TEXT NOT NULL DEFAULT '',returned_score REAL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
- const rows=await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at,u.name,e.code AS exercise_code,e.title,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id ORDER BY s.submitted_at DESC`).all();
+ const rows=await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at,u.name,e.code AS exercise_code,e.title,e.statement,e.rubric_json,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id ORDER BY s.submitted_at DESC`).all();
  return json({submissions:rows.results})
 }
  if(path.startsWith('/api/teacher/submissions/') && req.method==='DELETE' && user?.role==='teacher'){

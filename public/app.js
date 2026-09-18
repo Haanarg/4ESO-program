@@ -379,6 +379,7 @@ async function teacherDashboard(){
         </div>
         <details class="compact-review">
           <summary>Corregir</summary>
+          <details class="teacher-statement"><summary>📋 Veure enunciat i criteris</summary><div class="teacher-statement-body"><p>${esc(s.statement||'')}</p>${(()=>{let r=[];try{r=JSON.parse(s.rubric_json||'[]')}catch{}return r.length?`<h4>Criteris d'avaluació</h4><ul>${r.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>`:''})()}</div></details>
           <div class="compact-review-grid">
             <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
             <div class="compact-ai"><h4>Correcció IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</div>
