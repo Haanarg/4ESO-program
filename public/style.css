@@ -281,3 +281,16 @@ main{max-width:1720px}
   background:#0b1624;
   color:#9fb2c8;
 }
+
+/* Tasques retornades */
+.returned-feedback{
+  margin:0 0 18px;
+  padding:16px 18px;
+  border:1px solid rgba(251,191,36,.34);
+  border-radius:12px;
+  background:rgba(251,191,36,.07);
+}
+.returned-feedback h3{margin:8px 0 5px}
+.returned-feedback p{margin:0 0 6px;white-space:pre-wrap}
+.returned-feedback small{color:#aebed0}
+.status.returned{white-space:nowrap}
