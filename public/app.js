@@ -344,25 +344,62 @@ async function submitCode(){
 }
 
 function filterTeacher(status,btn){document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));btn?.classList.add('active');document.querySelectorAll('.submission[data-status]').forEach(x=>x.style.display=(status==='all'||x.dataset.status===status)?'':'none')}
+let teacherFilter='pending';
+
+function filterTeacher(status,btn){
+  teacherFilter=status;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter===status));
+  document.querySelectorAll('#teacher-list .submission').forEach(card=>{
+    card.hidden=status!=='all' && card.dataset.status!==status;
+  });
+  const visible=[...document.querySelectorAll('#teacher-list .submission')].filter(x=>!x.hidden).length;
+  const empty=$('#teacher-filter-empty');
+  if(empty) empty.hidden=visible!==0;
+}
+
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues i valida la nota final.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn active" onclick="filterTeacher(\'all\',this)">Totes</button><button class="filter-btn" onclick="filterTeacher(\'pending\',this)">Només pendents</button><button class="filter-btn" onclick="filterTeacher(\'returned\',this)">Retornades</button><button class="filter-btn" onclick="filterTeacher(\'validated\',this)">Validades</button></div><div id="teacher-list"></div>`;
-    if(!d.submissions.length){ $('#teacher-list').innerHTML='<div class="card"><p>Encara no hi ha entregues.</p></div>'; return; }
+    const counts={all:d.submissions.length,pending:0,returned:0,validated:0};
+    d.submissions.forEach(s=>counts[s.status==='returned'?'returned':s.status==='validated'?'validated':'pending']++);
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues pendents. Quan les validis o retornis, desapareixeran d'aquesta vista.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button></div><div id="teacher-list"></div>`;
+    if(!d.submissions.length){ $('#teacher-list').innerHTML='<div class="card compact-empty"><p>Encara no hi ha entregues.</p></div>'; return; }
     for(const s of d.submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
-      const validated=s.status==='validated';
-      const returned=s.status==='returned';
+      const validated=s.status==='validated',returned=s.status==='returned';
+      const status=returned?'returned':validated?'validated':'pending';
       const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':'Pendent';
-      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission ${returned?'returned-submission':''}" data-status="${returned?'returned':validated?'validated':'pending'}"><div class="submission-head"><div><span class="pill">${esc(s.exercise_code)}</span> <span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span><h3>${esc(s.name)} · ${esc(s.title)}</h3><small>${esc(s.submitted_at)}</small></div><div class="score small">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}/10</div></div><details><summary>Veure codi i correcció</summary><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre><h4>Feedback per a l'alumne</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<h4>Rúbrica proposada</h4><div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</details><div class="teacher-comment-box"><label>Comentari del professor</label><textarea id="comment-${s.id}" placeholder="Comentari opcional que veurà l\'alumne" ${returned?'disabled':''}>${esc(s.teacher_comment||'')}</textarea></div><div class="validate"><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(s.final_score!=null?s.final_score:(s.returned_score!=null?s.returned_score:(ai.score??'')))}" ${validated||returned?'disabled':''}><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'Validar nota'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retorn</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑 Eliminar</button>`}</div></article>`);
+      const proposed=s.final_score!=null?s.final_score:(s.returned_score!=null?s.returned_score:(ai.score??''));
+      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission compact-submission ${returned?'returned-submission':''}" data-status="${status}">
+        <div class="compact-submission-main">
+          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span></div>
+          <div class="compact-student"><strong>${esc(s.name)}</strong><span>${esc(s.title)}</span></div>
+          <small class="compact-date">${esc(s.submitted_at)}</small>
+          <div class="score compact-score">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}<small>/10</small></div>
+        </div>
+        <details class="compact-review">
+          <summary>Corregir</summary>
+          <div class="compact-review-grid">
+            <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
+            <div class="compact-ai"><h4>Correcció IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</div>
+          </div>
+          <div class="compact-correction-bar">
+            <label class="compact-comment"><span>Comentari</span><textarea id="comment-${s.id}" placeholder="Comentari opcional per a l'alumne" ${returned?'disabled':''}>${esc(s.teacher_comment||'')}</textarea></label>
+            <label class="compact-grade"><span>Nota</span><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(proposed)}" ${validated||returned?'disabled':''}></label>
+            <div class="compact-actions"><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'✓ Validar'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retornar</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑</button>`}</div>
+          </div>
+        </details>
+      </article>`);
     }
+    $('#teacher-list').insertAdjacentHTML('beforeend','<div id="teacher-filter-empty" class="card compact-empty" hidden><p>No hi ha entregues en aquesta vista.</p></div>');
+    filterTeacher(teacherFilter,null);
   }catch(e){ $('#app').innerHTML=`<div class="card"><h1>Panell del professor</h1><p class="error">${esc(e.message)}</p></div>`; }
 }
 
 async function validateSubmission(id){
   const input=$(`#score-${id}`); const score=Number(input.value);
   if(!Number.isFinite(score)||score<0||score>10){ alert('La nota ha de ser entre 0 i 10.'); return; }
-  const comment=$(`#comment-${id}`)?.value||''; try{ await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({score,comment})}); await teacherDashboard(); }
+  const comment=$(`#comment-${id}`)?.value||''; try{ await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({score,comment})}); teacherFilter='pending'; await teacherDashboard(); }
   catch(e){ alert(e.message); }
 }
 
@@ -371,7 +408,7 @@ async function deleteSubmission(id){
   if(!confirm("Vols eliminar definitivament aquesta entrega?\n\nAquesta acció esborrarà l'intent del panell i de l'historial de l'alumne i no es pot desfer.")) return;
   try{
     await api(`/api/teacher/submissions/${id}`,{method:'DELETE'});
-    await teacherDashboard();
+    teacherFilter='pending'; await teacherDashboard();
   }catch(e){ alert(e.message); }
 }
 
@@ -380,7 +417,7 @@ async function returnSubmission(id){
   if(!ok) return;
   try{
     const score=Number($(`#score-${id}`)?.value),comment=$(`#comment-${id}`)?.value||''; await api(`/api/teacher/submissions/${id}`,{method:'POST',body:JSON.stringify({action:'return',score:Number.isFinite(score)?score:null,comment})});
-    await teacherDashboard();
+    teacherFilter='pending'; await teacherDashboard();
   }catch(e){ alert(e.message); }
 }
 

@@ -294,3 +294,19 @@ main{max-width:1720px}
 .returned-feedback p{margin:0 0 6px;white-space:pre-wrap}
 .returned-feedback small{color:#aebed0}
 .status.returned{white-space:nowrap}
+
+/* Panell de correcció compacte */
+.teacher-filters{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}
+.teacher-filters .filter-btn{padding:7px 11px;min-height:34px;font-size:13px}
+.teacher-filters .filter-btn b{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.08);font-size:11px}
+#teacher-list{display:flex;flex-direction:column;gap:7px}
+.compact-submission{padding:0!important;overflow:hidden;margin:0!important}
+.compact-submission-main{display:grid;grid-template-columns:145px minmax(220px,1fr) 145px 64px;gap:12px;align-items:center;padding:10px 13px}
+.compact-id{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.compact-id .pill,.compact-id .status{font-size:10px;padding:3px 6px}
+.compact-student{min-width:0;display:flex;align-items:baseline;gap:9px}.compact-student strong{white-space:nowrap}.compact-student span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#91a4bb;font-size:13px}
+.compact-date{color:#71859c;font-size:11px;white-space:nowrap}.compact-score{font-size:20px!important;text-align:right}.compact-score small{font-size:10px;color:#71859c}
+.compact-review{border-top:1px solid #1b2a3d}.compact-review>summary{cursor:pointer;padding:7px 13px;font-size:12px;font-weight:750;color:#9fc2df;list-style-position:inside}.compact-review[open]>summary{border-bottom:1px solid #1b2a3d}
+.compact-review-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:14px;padding:12px 13px}.compact-review h4{margin:0 0 7px;font-size:12px}.compact-review p{font-size:12px;line-height:1.45;margin:5px 0}.compact-code pre{max-height:260px;overflow:auto;margin:0;padding:11px;font-size:12px}
+.compact-correction-bar{display:grid;grid-template-columns:minmax(220px,1fr) 75px auto;gap:10px;align-items:end;padding:10px 13px;border-top:1px solid #1b2a3d;background:rgba(5,11,19,.32)}
+.compact-correction-bar label span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#7f94ab;margin-bottom:4px}.compact-comment textarea{min-height:52px;height:52px;resize:vertical}.compact-grade input{width:100%;height:38px}.compact-actions{display:flex;gap:6px}.compact-actions button{min-height:38px;padding:7px 10px;font-size:12px}.compact-empty{padding:18px!important;text-align:center;color:#8fa3bd}
+@media(max-width:850px){.compact-submission-main{grid-template-columns:1fr auto}.compact-date{display:none}.compact-score{grid-column:2;grid-row:1}.compact-student{grid-column:1/-1}.compact-review-grid{grid-template-columns:1fr}.compact-correction-bar{grid-template-columns:1fr 75px}.compact-actions{grid-column:1/-1}}
