@@ -264,3 +264,20 @@ main{max-width:1720px}
     margin-top:34px!important;
   }
 }
+
+/* Bloqueig de l'entrega després del primer enviament */
+.submit-final.submitted-lock,
+.submit-final:disabled{
+  opacity:.42!important;
+  cursor:not-allowed!important;
+  filter:saturate(.35);
+  box-shadow:none!important;
+}
+.submitted-message{
+  margin-top:14px;
+  padding:11px 13px;
+  border:1px solid #294158;
+  border-radius:9px;
+  background:#0b1624;
+  color:#9fb2c8;
+}

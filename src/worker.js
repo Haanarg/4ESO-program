@@ -237,7 +237,19 @@ async function api(req,env){
   return json({drafts:rows.results});
  }
  if(path.startsWith('/api/exercises/') && req.method==='GET'){const id=path.split('/').pop(); const e=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json,tests_json FROM exercises WHERE id=?').bind(id).first(); return e?json(e):json({error:'No trobat'},404)}
- if(path.startsWith('/api/exercises/') && path.endsWith('/submissions') && req.method==='POST'){if(!user)return json({error:'Cal iniciar sessió.'},401);const id=path.split('/')[3];const e=await env.DB.prepare('SELECT * FROM exercises WHERE id=?').bind(id).first();if(!e)return json({error:'Exercici no trobat'},404);const b=await req.json();const code=String(b.code||'').slice(0,30000);const ai=await aiGrade(env,e,code,b.tests||[]);const result=await env.DB.prepare('INSERT INTO submissions(user_id,exercise_id,code,test_results_json,ai_result_json,status) VALUES(?,?,?,?,?,?) RETURNING id,submitted_at').bind(user.id,e.id,code,JSON.stringify(b.tests||[]),JSON.stringify(ai),'pending').first();try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=? AND exercise_id=?').bind(user.id,e.id).run();}catch{}return json({submission:result,ai})}
+ if(path.startsWith('/api/exercises/') && path.endsWith('/submissions') && req.method==='POST'){
+ if(!user)return json({error:'Cal iniciar sessió.'},401);
+ const id=path.split('/')[3];
+ const e=await env.DB.prepare('SELECT * FROM exercises WHERE id=?').bind(id).first();
+ if(!e)return json({error:'Exercici no trobat'},404);
+ const latest=await env.DB.prepare('SELECT id,status FROM submissions WHERE user_id=? AND exercise_id=? ORDER BY id DESC LIMIT 1').bind(user.id,e.id).first();
+ if(latest && latest.status!=='returned')return json({error:"Aquest exercici ja està enviat. Només el podràs tornar a enviar si el professor te'l retorna.",code:'ALREADY_SUBMITTED'},409);
+ const b=await req.json();const code=String(b.code||'').slice(0,30000);
+ const ai=await aiGrade(env,e,code,b.tests||[]);
+ const result=await env.DB.prepare('INSERT INTO submissions(user_id,exercise_id,code,test_results_json,ai_result_json,status) VALUES(?,?,?,?,?,?) RETURNING id,submitted_at').bind(user.id,e.id,code,JSON.stringify(b.tests||[]),JSON.stringify(ai),'pending').first();
+ try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=? AND exercise_id=?').bind(user.id,e.id).run();}catch{}
+ return json({submission:result,ai})
+}
  if(path==='/api/my-submissions' && user){
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS submission_feedback(submission_id INTEGER PRIMARY KEY,teacher_comment TEXT NOT NULL DEFAULT '',returned_score REAL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
  const rows=await env.DB.prepare(`SELECT s.*,e.code,e.title,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id WHERE s.user_id=? ORDER BY s.submitted_at DESC`).bind(user.id).all();
