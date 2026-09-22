@@ -252,7 +252,7 @@ async function api(req,env){
 }
  if(path==='/api/my-submissions' && user){
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS submission_feedback(submission_id INTEGER PRIMARY KEY,teacher_comment TEXT NOT NULL DEFAULT '',returned_score REAL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
- const rows=await env.DB.prepare(`SELECT s.*,e.code,e.title,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id WHERE s.user_id=? ORDER BY s.submitted_at DESC`).bind(user.id).all();
+ const rows=await env.DB.prepare(`SELECT s.*,e.code AS exercise_code,e.title,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id WHERE s.user_id=? ORDER BY s.id DESC`).bind(user.id).all();
  return json({submissions:rows.results})
 }
  if(/^\/api\/teacher\/students\/\d+$/.test(path) && req.method==='PUT' && user?.role==='teacher'){
