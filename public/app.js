@@ -1,4 +1,4 @@
-let user=null, exercises=[], current=null, py=null, studentPreview=false, codeEditor=null, draftTimer=null, draftSaving=false;
+let user=null, exercises=[], current=null, py=null, studentPreview=false, codeEditor=null, draftTimer=null, draftSaving=false, passwordResetToken=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -20,12 +20,48 @@ function nav(){
     : '';
 }
 
+function resetTokenFromHash(){
+  const raw=location.hash.startsWith('#reset=')?location.hash.slice(7):'';
+  if(!raw)return null;
+  try{return decodeURIComponent(raw)}catch{return null}
+}
+
 async function start(){
+  const resetToken=resetTokenFromHash();
+  if(resetToken){
+    passwordResetToken=resetToken;
+    history.replaceState(null,'',location.pathname+location.search);
+    user=null;nav();
+    return passwordResetPage(resetToken);
+  }
   try{ user=(await api('/api/me')).user; }catch{}
   nav();
   if(!user) return login();
   if(user.role==='teacher') return teacherDashboard();
   return dashboard();
+}
+
+async function passwordResetPage(token){
+  $('#app').innerHTML='<div class="card auth reset-auth"><h1>Programació 4ESO</h1><h2>Restabliment de contrasenya</h2><p>Comprovant l’enllaç segur…</p></div>';
+  try{
+    const d=await api('/api/password-reset/validate',{method:'POST',body:JSON.stringify({token})});
+    $('#app').innerHTML=`<div class="card auth reset-auth"><h1>Programació 4ESO</h1><h2>Nova contrasenya</h2><p>Compte de <strong>${esc(d.name||'alumne')}</strong>. Escriu la nova contrasenya dues vegades.</p><label>Nova contrasenya<input id="reset-pw" type="password" minlength="6" autocomplete="new-password" placeholder="Mínim 6 caràcters"></label><label>Repeteix la contrasenya<input id="reset-pw2" type="password" minlength="6" autocomplete="new-password" placeholder="Repeteix-la"></label><button id="reset-submit" onclick="completePasswordReset()">Canvia la contrasenya</button><p id="reset-msg"></p></div>`;
+  }catch(e){
+    passwordResetToken=null;
+    $('#app').innerHTML=`<div class="card auth reset-auth"><h1>Programació 4ESO</h1><h2>Enllaç no vàlid</h2><p class="error">${esc(e.message)}</p><p>Aquest enllaç pot haver caducat o ja haver-se utilitzat.</p><button onclick="login()">Torna a iniciar sessió</button></div>`;
+  }
+}
+
+async function completePasswordReset(){
+  const pw=$('#reset-pw')?.value||'',pw2=$('#reset-pw2')?.value||'',msg=$('#reset-msg'),btn=$('#reset-submit');
+  if(pw.length<6){msg.textContent='La contrasenya ha de tenir com a mínim 6 caràcters.';msg.className='error';return}
+  if(pw!==pw2){msg.textContent='Les dues contrasenyes no coincideixen.';msg.className='error';return}
+  btn.disabled=true;btn.textContent='Actualitzant…';msg.textContent='';
+  try{
+    await api('/api/password-reset/complete',{method:'POST',body:JSON.stringify({token:passwordResetToken,password:pw})});
+    passwordResetToken=null;
+    $('#app').innerHTML='<div class="card auth reset-auth"><h1>Programació 4ESO</h1><h2>Contrasenya actualitzada</h2><p class="reset-success">✓ Ja pots iniciar sessió amb la nova contrasenya. Les sessions anteriors del compte s’han tancat.</p><button onclick="login()">Inicia sessió</button></div>';
+  }catch(e){msg.textContent=e.message;msg.className='error';btn.disabled=false;btn.textContent='Canvia la contrasenya'}
 }
 
 function login(){
@@ -56,6 +92,22 @@ async function logout(){
 }
 
 
+
+async function sendPasswordReset(id){
+  const ok=confirm('Enviar un correu de restabliment de contrasenya a aquest alumne?\n\nL’enllaç serà d’un sol ús i caducarà al cap de 60 minuts.');
+  if(!ok)return;
+  const btn=$(`#reset-pass-${id}`);
+  const old=btn?.textContent;
+  if(btn){btn.disabled=true;btn.textContent='Enviant…'}
+  try{
+    const d=await api(`/api/teacher/students/${id}/password-reset`,{method:'POST',body:'{}'});
+    alert(`Correu de restabliment enviat a ${d.email}.\n\nL’enllaç caduca en ${d.expires_minutes||60} minuts.`);
+  }catch(e){
+    alert(`No s'ha pogut enviar el correu: ${e.message}`);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=old||'🔑 Contrasenya'}
+  }
+}
 
 function editStudent(student){
   const overlay=document.createElement('div');
@@ -104,7 +156,7 @@ function filterProgressChapter(){const v=$('#progress-chapter')?.value||'all';do
 async function teacherStudentDetail(id){
  const d=await api(`/api/teacher/students/${id}/progress`),{student,exercises:exs,submissions:subs,drafts}=d,byEx={};for(const s of subs)(byEx[s.exercise_id]??=[]).push(s);
  const val=subs.filter(s=>s.status==='validated'&&s.final_score!=null),avg=val.length?(val.reduce((x,s)=>x+Number(s.final_score),0)/val.length).toFixed(1):'—',chs=[...new Set(exs.map(e=>e.chapter))];
- $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${n!=null?esc(n)+'/10':'—'}</strong><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
+ $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><div class="student-detail-actions"><button id="reset-pass-${student.id}" class="secondary" onclick="sendPasswordReset(${student.id})">🔑 Restableix contrasenya</button><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${n!=null?esc(n)+'/10':'—'}</strong><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
 }
 async function teacherProgress(){
   const d=await api('/api/teacher/progress');
@@ -151,7 +203,7 @@ async function teacherProgress(){
           </tr></thead>
           <tbody>
             ${students.map(st=>`<tr>
-              <th class="student-col"><div class="student-identity"><div class="student-open" onclick="teacherStudentDetail(${st.id})"><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></div><div class="student-row-actions"><button class="mini-btn" title="Editar alumne" onclick='editStudent(${JSON.stringify(st)})'>✏ Edita</button><button class="mini-btn delete-student-btn" title="Eliminar alumne" onclick='deleteStudent(${st.id},${JSON.stringify(st.name)})'>🗑</button></div></div></th>
+              <th class="student-col"><div class="student-identity"><div class="student-open" onclick="teacherStudentDetail(${st.id})"><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></div><div class="student-row-actions"><button class="mini-btn" title="Editar alumne" onclick='editStudent(${JSON.stringify(st)})'>✏ Edita</button><button id="reset-pass-${st.id}" class="mini-btn reset-password-btn" title="Envia un correu segur per restablir la contrasenya" onclick="sendPasswordReset(${st.id})">🔑 Contrasenya</button><button class="mini-btn delete-student-btn" title="Eliminar alumne" onclick='deleteStudent(${st.id},${JSON.stringify(st.name)})'>🗑</button></div></div></th>
               <td class="summary-col"><strong>${completedFor(st)}/${exs.length}</strong></td>
               ${exs.map(e=>`<td data-chapter="${e.chapter}">${cell(st,e)}</td>`).join('')}
             </tr>`).join('') || `<tr><td colspan="${exs.length+2}">Encara no hi ha alumnes registrats.</td></tr>`}
