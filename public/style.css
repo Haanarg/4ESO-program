@@ -420,3 +420,35 @@ main{max-width:1720px}
 .student-detail-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .reset-password-btn{white-space:nowrap}
 @media(max-width:760px){.student-detail-actions{width:100%;justify-content:stretch}.student-detail-actions button{flex:1}}
+
+/* Recuperació de contrasenya amb codi temporal */
+.recovery-login-btn{display:block;width:100%;margin-top:10px}
+.recovery-code-input{
+  text-transform:uppercase;
+  letter-spacing:.16em;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-weight:800;
+  text-align:center;
+}
+.reset-code-modal{max-width:520px!important;text-align:center}
+.reset-code-modal .modal-title{text-align:left}
+.reset-code-display{
+  margin:18px auto 10px;
+  padding:18px 20px;
+  border:1px solid rgba(103,232,249,.34);
+  border-radius:12px;
+  background:#07111e;
+  color:#dffbff;
+  font:900 clamp(28px,6vw,42px)/1 ui-monospace,SFMono-Regular,Consolas,monospace;
+  letter-spacing:.10em;
+  user-select:all;
+}
+.reset-code-warning{
+  margin:10px 0 16px;
+  padding:9px 11px;
+  border-radius:8px;
+  background:rgba(251,191,36,.08);
+  color:#d9bd76;
+  font-size:12px;
+}
+.reset-code-modal .modal-actions{justify-content:center}
