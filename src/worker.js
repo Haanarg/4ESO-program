@@ -22,6 +22,39 @@ async function passwordOk(password, stored){
  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations,hash:'SHA-256'},key,256);
  return b64u(new Uint8Array(bits))===want;
 }
+function htmlEsc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function ensurePasswordResetTable(env){
+ await env.DB.prepare(`CREATE TABLE IF NOT EXISTS password_reset_tokens(
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+   user_id INTEGER NOT NULL,
+   token_hash TEXT NOT NULL UNIQUE,
+   expires_at TEXT NOT NULL,
+   used_at TEXT,
+   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   created_by INTEGER
+ )`).run();
+ await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)').run();
+}
+function newPasswordResetToken(){return b64u(crypto.getRandomValues(new Uint8Array(32)));}
+async function sendPasswordResetEmail(env,{to,name,resetUrl}){
+ const from=String(env.PASSWORD_RESET_FROM||'').trim();
+ if(!from) throw new Error('Falta configurar PASSWORD_RESET_FROM amb una adreça remitent verificada.');
+ const subject='Restabliment de contrasenya · Programació 4ESO';
+ const safeName=htmlEsc(name||'alumne'),safeUrl=htmlEsc(resetUrl);
+ const textBody=`Hola ${name||'alumne'},\n\nEl professor ha iniciat un restabliment de la teva contrasenya de Programació 4ESO.\n\nObre aquest enllaç (caduca en 60 minuts i només es pot utilitzar una vegada):\n${resetUrl}\n\nSi no esperaves aquest correu, pots ignorar-lo.`;
+ const htmlBody=`<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:620px;margin:auto;color:#172033"><h2>Programació 4ESO</h2><p>Hola ${safeName},</p><p>El professor ha iniciat un restabliment de la teva contrasenya.</p><p><a href="${safeUrl}" style="display:inline-block;background:#0f766e;color:white;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700">Restableix la contrasenya</a></p><p style="font-size:13px;color:#5b6475">L'enllaç caduca en 60 minuts i només es pot utilitzar una vegada. Si no esperaves aquest correu, pots ignorar-lo.</p></div>`;
+ if(env.EMAIL?.send){
+   await env.EMAIL.send({to,from,subject,text:textBody,html:htmlBody});
+   return 'cloudflare';
+ }
+ const key=String(env.RESEND_API_KEY||'').trim();
+ if(key){
+   const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'content-type':'application/json','authorization':`Bearer ${key}`},body:JSON.stringify({from,to:[to],subject,text:textBody,html:htmlBody})});
+   if(!r.ok){const detail=(await r.text()).slice(0,500);throw new Error(`No s'ha pogut enviar el correu (${r.status}): ${detail}`);}
+   return 'resend';
+ }
+ throw new Error('No hi ha cap servei de correu configurat. Configura RESEND_API_KEY o el binding EMAIL de Cloudflare.');
+}
 function cookie(req){return req.headers.get('Cookie')?.match(/session=([^;]+)/)?.[1] || ''}
 async function auth(req,env){const t=cookie(req); if(!t)return null; const th=await sha256(t); const row=await env.DB.prepare('SELECT u.id,u.name,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(th,new Date().toISOString()).first(); return row||null;}
 async function session(user,env){const raw=crypto.randomUUID()+'-'+crypto.randomUUID(); const th=await sha256(raw); const exp=new Date(Date.now()+1000*60*60*24*14).toISOString(); await env.DB.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(th,user.id,exp).run(); return new Response(JSON.stringify({user}),{headers:{'content-type':'application/json','Set-Cookie':`session=${raw}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1209600`}})}
@@ -187,6 +220,53 @@ async function api(req,env){
  if(path==='/api/login' && req.method==='POST'){const b=await req.json(); const r=await env.DB.prepare('SELECT id,name,email,password_hash,role FROM users WHERE email=?').bind((b.email||'').toLowerCase().trim()).first(); if(!r||!(await passwordOk(b.password||'',r.password_hash)))return json({error:'Credencials incorrectes.'},401); delete r.password_hash; return session(r,env)}
  if(path==='/api/me') return json({user});
  if(path==='/api/logout'){const t=cookie(req);if(t)await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(t)).run();return new Response('',{status:204,headers:{'Set-Cookie':'session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0'}})}
+ if(/^\/api\/teacher\/students\/\d+\/password-reset$/.test(path) && req.method==='POST' && user?.role==='teacher'){
+  const id=Number(path.split('/')[4]);
+  const student=await env.DB.prepare(`SELECT id,name,email,role FROM users WHERE id=?`).bind(id).first();
+  if(!student || student.role!=='student') return json({error:'Alumne no trobat.'},404);
+  await ensurePasswordResetTable(env);
+  const recent=await env.DB.prepare(`SELECT id FROM password_reset_tokens WHERE user_id=? AND used_at IS NULL AND created_at>datetime('now','-60 seconds') LIMIT 1`).bind(id).first();
+  if(recent) return json({error:'Ja s’ha enviat un correu de restabliment fa menys d’un minut. Espera abans de tornar-ho a provar.'},429);
+  await env.DB.prepare(`UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE user_id=? AND used_at IS NULL`).bind(id).run();
+  const raw=newPasswordResetToken(),tokenHash=await sha256(raw),expiresAt=new Date(Date.now()+60*60*1000).toISOString();
+  const inserted=await env.DB.prepare(`INSERT INTO password_reset_tokens(user_id,token_hash,expires_at,created_by) VALUES(?,?,?,?) RETURNING id`).bind(id,tokenHash,expiresAt,user.id).first();
+  const base=String(env.APP_BASE_URL||new URL(req.url).origin).replace(/\/+$/,'');
+  const resetUrl=`${base}/#reset=${encodeURIComponent(raw)}`;
+  try{
+   const provider=await sendPasswordResetEmail(env,{to:student.email,name:student.name,resetUrl});
+   return json({ok:true,email:student.email,expires_minutes:60,provider});
+  }catch(err){
+   if(inserted?.id) await env.DB.prepare('DELETE FROM password_reset_tokens WHERE id=?').bind(inserted.id).run();
+   return json({error:'No s’ha pogut enviar el correu de restabliment.',detail:String(err?.message||err).slice(0,700)},503);
+  }
+ }
+ if(path==='/api/password-reset/validate' && req.method==='POST'){
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const token=String(b.token||'');
+  if(token.length<32) return json({valid:false,error:'Enllaç de restabliment no vàlid.'},400);
+  await ensurePasswordResetTable(env);
+  const tokenHash=await sha256(token);
+  const row=await env.DB.prepare(`SELECT p.id,u.name FROM password_reset_tokens p JOIN users u ON u.id=p.user_id WHERE p.token_hash=? AND p.used_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP LIMIT 1`).bind(tokenHash).first();
+  return row?json({valid:true,name:row.name}):json({valid:false,error:'Aquest enllaç ha caducat o ja s’ha utilitzat.'},400);
+ }
+ if(path==='/api/password-reset/complete' && req.method==='POST'){
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const token=String(b.token||''),password=String(b.password||'');
+  if(token.length<32) return json({error:'Enllaç de restabliment no vàlid.'},400);
+  if(password.length<6) return json({error:'La contrasenya ha de tenir com a mínim 6 caràcters.'},400);
+  if(password.length>200) return json({error:'La contrasenya és massa llarga.'},400);
+  await ensurePasswordResetTable(env);
+  const tokenHash=await sha256(token);
+  const claimed=await env.DB.prepare(`UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE token_hash=? AND used_at IS NULL AND expires_at>CURRENT_TIMESTAMP RETURNING user_id`).bind(tokenHash).first();
+  if(!claimed?.user_id) return json({error:'Aquest enllaç ha caducat o ja s’ha utilitzat.'},400);
+  const h=await passwordHash(password);
+  await env.DB.batch([
+   env.DB.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(h,claimed.user_id),
+   env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(claimed.user_id),
+   env.DB.prepare(`UPDATE password_reset_tokens SET used_at=COALESCE(used_at,CURRENT_TIMESTAMP) WHERE user_id=? AND used_at IS NULL`).bind(claimed.user_id)
+  ]);
+  return json({ok:true});
+ }
  if(path==='/api/exercises'){const rows=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json FROM exercises ORDER BY chapter,sort_order').all(); return json({exercises:rows.results})}
  if(/^\/api\/exercises\/\d+\/draft$/.test(path) && req.method==='GET'){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
