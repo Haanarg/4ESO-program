@@ -7,6 +7,7 @@ La via recomanada és pujar el projecte a GitHub des del navegador i connectar e
 
 - registre d'alumnes
 - inici de sessió
+- recuperació de contrasenya amb codi temporal generat pel professor (sense correu)
 - curs amb capítols 1 i 2
 - activitats 1.1–1.3 i 2.1–2.4
 - editor Python al navegador amb Pyodide
@@ -103,7 +104,6 @@ Si el domini encara no utilitza els DNS de Cloudflare, Cloudflare et mostrarà e
 
 Aquesta és una primera versió funcional de desenvolupament. Abans de donar-la als alumnes cal reforçar:
 
-- recuperació de contrasenya
 - verificació de correu si la vols
 - protecció contra intents de login
 - validació més estricta de les entregues
