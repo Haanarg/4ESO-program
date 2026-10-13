@@ -246,7 +246,7 @@ async function api(req,env){
   if(token.length<32) return json({valid:false,error:'Enllaç de restabliment no vàlid.'},400);
   await ensurePasswordResetTable(env);
   const tokenHash=await sha256(token);
-  const row=await env.DB.prepare(`SELECT p.id,u.name FROM password_reset_tokens p JOIN users u ON u.id=p.user_id WHERE p.token_hash=? AND p.used_at IS NULL AND p.expires_at>CURRENT_TIMESTAMP LIMIT 1`).bind(tokenHash).first();
+  const row=await env.DB.prepare(`SELECT p.id,u.name FROM password_reset_tokens p JOIN users u ON u.id=p.user_id WHERE p.token_hash=? AND p.used_at IS NULL AND p.expires_at>? LIMIT 1`).bind(tokenHash,new Date().toISOString()).first();
   return row?json({valid:true,name:row.name}):json({valid:false,error:'Aquest enllaç ha caducat o ja s’ha utilitzat.'},400);
  }
  if(path==='/api/password-reset/complete' && req.method==='POST'){
@@ -257,7 +257,7 @@ async function api(req,env){
   if(password.length>200) return json({error:'La contrasenya és massa llarga.'},400);
   await ensurePasswordResetTable(env);
   const tokenHash=await sha256(token);
-  const claimed=await env.DB.prepare(`UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE token_hash=? AND used_at IS NULL AND expires_at>CURRENT_TIMESTAMP RETURNING user_id`).bind(tokenHash).first();
+  const claimed=await env.DB.prepare(`UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE token_hash=? AND used_at IS NULL AND expires_at>? RETURNING user_id`).bind(tokenHash,new Date().toISOString()).first();
   if(!claimed?.user_id) return json({error:'Aquest enllaç ha caducat o ja s’ha utilitzat.'},400);
   const h=await passwordHash(password);
   await env.DB.batch([
