@@ -412,3 +412,11 @@ main{max-width:1720px}
   margin:0;background:#080f1a;color:#e8f4ff;
   font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;
 }
+
+/* Restabliment segur de contrasenya */
+.reset-auth{max-width:520px!important}
+.reset-auth label{display:block;text-align:left;font-size:12px;font-weight:750;color:#9fb2c8;margin-top:10px}
+.reset-auth .reset-success{padding:12px 14px;border:1px solid rgba(134,239,172,.30);border-radius:9px;background:rgba(34,197,94,.07);color:#c9f7d8}
+.student-detail-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.reset-password-btn{white-space:nowrap}
+@media(max-width:760px){.student-detail-actions{width:100%;justify-content:stretch}.student-detail-actions button{flex:1}}
