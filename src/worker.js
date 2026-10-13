@@ -22,7 +22,6 @@ async function passwordOk(password, stored){
  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations,hash:'SHA-256'},key,256);
  return b64u(new Uint8Array(bits))===want;
 }
-function htmlEsc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function ensurePasswordResetTable(env){
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS password_reset_tokens(
    id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,25 +34,13 @@ async function ensurePasswordResetTable(env){
  )`).run();
  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)').run();
 }
-function newPasswordResetToken(){return b64u(crypto.getRandomValues(new Uint8Array(32)));}
-async function sendPasswordResetEmail(env,{to,name,resetUrl}){
- const from=String(env.PASSWORD_RESET_FROM||'').trim();
- if(!from) throw new Error('Falta configurar PASSWORD_RESET_FROM amb una adreça remitent verificada.');
- const subject='Restabliment de contrasenya · Programació 4ESO';
- const safeName=htmlEsc(name||'alumne'),safeUrl=htmlEsc(resetUrl);
- const textBody=`Hola ${name||'alumne'},\n\nEl professor ha iniciat un restabliment de la teva contrasenya de Programació 4ESO.\n\nObre aquest enllaç (caduca en 60 minuts i només es pot utilitzar una vegada):\n${resetUrl}\n\nSi no esperaves aquest correu, pots ignorar-lo.`;
- const htmlBody=`<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:620px;margin:auto;color:#172033"><h2>Programació 4ESO</h2><p>Hola ${safeName},</p><p>El professor ha iniciat un restabliment de la teva contrasenya.</p><p><a href="${safeUrl}" style="display:inline-block;background:#0f766e;color:white;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700">Restableix la contrasenya</a></p><p style="font-size:13px;color:#5b6475">L'enllaç caduca en 60 minuts i només es pot utilitzar una vegada. Si no esperaves aquest correu, pots ignorar-lo.</p></div>`;
- if(env.EMAIL?.send){
-   await env.EMAIL.send({to,from,subject,text:textBody,html:htmlBody});
-   return 'cloudflare';
- }
- const key=String(env.RESEND_API_KEY||'').trim();
- if(key){
-   const r=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'content-type':'application/json','authorization':`Bearer ${key}`},body:JSON.stringify({from,to:[to],subject,text:textBody,html:htmlBody})});
-   if(!r.ok){const detail=(await r.text()).slice(0,500);throw new Error(`No s'ha pogut enviar el correu (${r.status}): ${detail}`);}
-   return 'resend';
- }
- throw new Error('No hi ha cap servei de correu configurat. Configura RESEND_API_KEY o el binding EMAIL de Cloudflare.');
+const RESET_CODE_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function normalizeResetCode(code){return String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+function newPasswordResetCode(){
+ const bytes=crypto.getRandomValues(new Uint8Array(10));
+ let raw='';
+ for(const b of bytes) raw+=RESET_CODE_ALPHABET[b%RESET_CODE_ALPHABET.length];
+ return raw.slice(0,5)+'-'+raw.slice(5);
 }
 function cookie(req){return req.headers.get('Cookie')?.match(/session=([^;]+)/)?.[1] || ''}
 async function auth(req,env){const t=cookie(req); if(!t)return null; const th=await sha256(t); const row=await env.DB.prepare('SELECT u.id,u.name,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(th,new Date().toISOString()).first(); return row||null;}
@@ -225,41 +212,33 @@ async function api(req,env){
   const student=await env.DB.prepare(`SELECT id,name,email,role FROM users WHERE id=?`).bind(id).first();
   if(!student || student.role!=='student') return json({error:'Alumne no trobat.'},404);
   await ensurePasswordResetTable(env);
-  const recent=await env.DB.prepare(`SELECT id FROM password_reset_tokens WHERE user_id=? AND used_at IS NULL AND created_at>datetime('now','-60 seconds') LIMIT 1`).bind(id).first();
-  if(recent) return json({error:'Ja s’ha enviat un correu de restabliment fa menys d’un minut. Espera abans de tornar-ho a provar.'},429);
   await env.DB.prepare(`UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE user_id=? AND used_at IS NULL`).bind(id).run();
-  const raw=newPasswordResetToken(),tokenHash=await sha256(raw),expiresAt=new Date(Date.now()+60*60*1000).toISOString();
-  const inserted=await env.DB.prepare(`INSERT INTO password_reset_tokens(user_id,token_hash,expires_at,created_by) VALUES(?,?,?,?) RETURNING id`).bind(id,tokenHash,expiresAt,user.id).first();
-  const base=String(env.APP_BASE_URL||new URL(req.url).origin).replace(/\/+$/,'');
-  const resetUrl=`${base}/#reset=${encodeURIComponent(raw)}`;
-  try{
-   const provider=await sendPasswordResetEmail(env,{to:student.email,name:student.name,resetUrl});
-   return json({ok:true,email:student.email,expires_minutes:60,provider});
-  }catch(err){
-   if(inserted?.id) await env.DB.prepare('DELETE FROM password_reset_tokens WHERE id=?').bind(inserted.id).run();
-   return json({error:'No s’ha pogut enviar el correu de restabliment.',detail:String(err?.message||err).slice(0,700)},503);
-  }
+  const code=newPasswordResetCode(),normalized=normalizeResetCode(code),tokenHash=await sha256(normalized),expiresAt=new Date(Date.now()+15*60*1000).toISOString();
+  await env.DB.prepare(`INSERT INTO password_reset_tokens(user_id,token_hash,expires_at,created_by) VALUES(?,?,?,?)`).bind(id,tokenHash,expiresAt,user.id).run();
+  return json({ok:true,code,name:student.name,expires_minutes:15});
  }
- if(path==='/api/password-reset/validate' && req.method==='POST'){
+ if(path==='/api/password-reset/validate-code' && req.method==='POST'){
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
-  const token=String(b.token||'');
-  if(token.length<32) return json({valid:false,error:'Enllaç de restabliment no vàlid.'},400);
+  const code=normalizeResetCode(b.code);
+  if(code.length!==10) return json({valid:false,error:'El codi de recuperació no és vàlid.'},400);
   await ensurePasswordResetTable(env);
-  const tokenHash=await sha256(token);
-  const row=await env.DB.prepare(`SELECT p.id,u.name FROM password_reset_tokens p JOIN users u ON u.id=p.user_id WHERE p.token_hash=? AND p.used_at IS NULL AND p.expires_at>? LIMIT 1`).bind(tokenHash,new Date().toISOString()).first();
-  return row?json({valid:true,name:row.name}):json({valid:false,error:'Aquest enllaç ha caducat o ja s’ha utilitzat.'},400);
+  const tokenHash=await sha256(code),now=new Date().toISOString();
+  const row=await env.DB.prepare(`SELECT p.id,u.name FROM password_reset_tokens p JOIN users u ON u.id=p.user_id WHERE p.token_hash=? AND p.used_at IS NULL AND p.expires_at>? LIMIT 1`).bind(tokenHash,now).first();
+  return row?json({valid:true,name:row.name}):json({valid:false,error:'Aquest codi ha caducat, ja s’ha utilitzat o no és correcte.'},400);
  }
- if(path==='/api/password-reset/complete' && req.method==='POST'){
+ if(path==='/api/password-reset/complete-code' && req.method==='POST'){
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
-  const token=String(b.token||''),password=String(b.password||'');
-  if(token.length<32) return json({error:'Enllaç de restabliment no vàlid.'},400);
+  const code=normalizeResetCode(b.code),password=String(b.password||'');
+  if(code.length!==10) return json({error:'El codi de recuperació no és vàlid.'},400);
   if(password.length<6) return json({error:'La contrasenya ha de tenir com a mínim 6 caràcters.'},400);
   if(password.length>200) return json({error:'La contrasenya és massa llarga.'},400);
   await ensurePasswordResetTable(env);
-  const tokenHash=await sha256(token);
-  const claimed=await env.DB.prepare(`UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE token_hash=? AND used_at IS NULL AND expires_at>? RETURNING user_id`).bind(tokenHash,new Date().toISOString()).first();
-  if(!claimed?.user_id) return json({error:'Aquest enllaç ha caducat o ja s’ha utilitzat.'},400);
+  const tokenHash=await sha256(code),now=new Date().toISOString();
+  const row=await env.DB.prepare(`SELECT id,user_id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>? LIMIT 1`).bind(tokenHash,now).first();
+  if(!row?.user_id) return json({error:'Aquest codi ha caducat, ja s’ha utilitzat o no és correcte.'},400);
   const h=await passwordHash(password);
+  const claimed=await env.DB.prepare(`UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE id=? AND used_at IS NULL RETURNING user_id`).bind(row.id).first();
+  if(!claimed?.user_id) return json({error:'Aquest codi ja s’ha utilitzat.'},409);
   await env.DB.batch([
    env.DB.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(h,claimed.user_id),
    env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(claimed.user_id),
