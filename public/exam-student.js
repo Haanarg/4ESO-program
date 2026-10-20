@@ -38,7 +38,7 @@ function studentExamCards(items){
 }
 
 async function startExam(id){
-  const ok=confirm('Vols començar l’examen ara?\n\nEn començar, el temps comptarà. La feina es desarà automàticament i es registraran canvis de pestanya, sortides de pantalla completa i enganxats de blocs de codi de més d’una línia.');
+  const ok=confirm('Vols començar l’examen ara?\n\nEn començar, el temps comptarà. La feina es desarà automàticament. Es registraran els enganxats de més d’una línia (ALERTA DE COPY-PASTE), insercions massives, canvis de pestanya o finestra, sortides de pantalla completa, blocs multilínia arrossegats i intents d’accés extern des del codi.');
   if(!ok)return;
   try{
     if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
