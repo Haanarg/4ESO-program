@@ -21,7 +21,7 @@ async function teacherExams(){
   try{
     const d=await api('/api/teacher/exams'),items=d.exams||[];
     $('#app').innerHTML=`<div class="teacher-head"><div><h1>Exàmens de programació</h1><p>Crea, programa, obre, tanca i corregeix exàmens des d’un sol lloc.</p></div><div class="teacher-actions"><button onclick="teacherNewExam()">＋ Nou examen</button><button class="secondary" onclick="teacherDashboard()">← Panell professor</button></div></div>
-      <div class="exam-admin-grid">${items.map(e=>`<article class="card exam-admin-card"><div class="exam-admin-card-head"><span class="status ${e.effective_state==='active'?'exam-live':e.effective_state==='closed'?'returned':'draft'}">${esc(examStateLabel(e.effective_state))}</span><small>${esc(e.question_count)} exercicis</small></div><h2>${esc(e.title)}</h2><p>${esc(e.description||'')}</p><div class="exam-meta"><small>Inici: ${esc(fmtDateTime(e.start_at))}</small><small>Final: ${esc(fmtDateTime(e.end_at))}</small><small>${e.duration_minutes?esc(e.duration_minutes)+' min':'Sense límit individual'}</small><small>${esc(e.attempt_count)} intents · ${esc(e.submitted_count)} lliurats · ${esc(e.graded_count)} corregits</small></div><div class="exam-admin-actions"><button onclick="teacherEditExam(${e.id})">Configura</button><button class="secondary" onclick="teacherExamResults(${e.id})">Lliuraments</button></div></article>`).join('')||'<div class="card compact-empty"><p>Encara no hi ha exàmens.</p></div>'}</div>`;
+      <div class="exam-admin-grid">${items.map(e=>`<article class="card exam-admin-card"><div class="exam-admin-card-head"><span class="status ${e.effective_state==='active'?'exam-live':e.effective_state==='closed'?'returned':'draft'}">${esc(examStateLabel(e.effective_state))}</span><small>${esc(e.question_count)} exercicis</small></div><h2>${esc(e.title)}</h2><p>${esc(e.description||'')}</p><div class="exam-meta"><small>Inici: ${esc(fmtDateTime(e.start_at))}</small><small>Final: ${esc(fmtDateTime(e.end_at))}</small><small>${e.duration_minutes?esc(e.duration_minutes)+' min':'Sense límit individual'}</small><small>${esc(e.attempt_count)} intents · ${esc(e.submitted_count)} lliurats · ${esc(e.graded_count)} corregits</small></div><div class="exam-admin-actions"><button onclick="teacherEditExam(${e.id})">Configura</button><button class="secondary" onclick="teacherExamResults(${e.id})">Lliuraments</button><button class="delete-btn" onclick="deleteExam(${e.id})">🗑 Elimina</button></div></article>`).join('')||'<div class="card compact-empty"><p>Encara no hi ha exàmens.</p></div>'}</div>`;
   }catch(e){$('#app').innerHTML=`<div class="card"><h1>Exàmens</h1><p class="error">${esc(e.message)}</p><button onclick="teacherDashboard()">← Torna</button></div>`}
 }
 function teacherNewExam(){
@@ -42,7 +42,7 @@ async function teacherEditExam(id){
   try{
     const d=await api(`/api/teacher/exams/${id}`),e=d.exam,qs=d.questions||[],locked=Number(e.attempt_count||0)>0;
     $('#app').innerHTML=`<div class="teacher-head"><div><span class="status ${e.effective_state==='active'?'exam-live':e.effective_state==='closed'?'returned':'draft'}">${esc(examStateLabel(e.effective_state))}</span><h1>${esc(e.title)}</h1><p>${locked?'L’examen ja té intents: els exercicis queden bloquejats per preservar els lliuraments.':'Configura l’examen i els seus exercicis.'}</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${e.id})">📋 Lliuraments</button><button class="secondary" onclick="teacherExams()">← Exàmens</button></div></div>
-      <section class="card exam-form-card"><h2>Configuració</h2><label>Títol<input id="exam-title" value="${esc(e.title)}"></label><label>Descripció<textarea id="exam-description" rows="3">${esc(e.description||'')}</textarea></label><div class="exam-settings-grid"><label>Inici<input id="exam-start" type="datetime-local" value="${esc(toLocalInput(e.start_at))}"></label><label>Final<input id="exam-end" type="datetime-local" value="${esc(toLocalInput(e.end_at))}"></label><label>Temps individual (min)<input id="exam-duration" type="number" min="1" max="480" value="${esc(e.duration_minutes??'')}"></label></div><div class="exam-lifecycle-actions"><button onclick="saveExamSettings(${e.id})">💾 Desa configuració</button><button class="secondary" onclick="setExamStatus(${e.id},'scheduled')">🗓 Programa</button><button class="secondary" onclick="setExamStatus(${e.id},'open')">▶ Obre ara</button><button class="return-btn" onclick="setExamStatus(${e.id},'closed')">■ Tanca</button>${!locked?`<button class="delete-btn" onclick="deleteExam(${e.id})">🗑 Elimina</button>`:''}</div><p id="exam-settings-msg"></p></section>
+      <section class="card exam-form-card"><h2>Configuració</h2><label>Títol<input id="exam-title" value="${esc(e.title)}"></label><label>Descripció<textarea id="exam-description" rows="3">${esc(e.description||'')}</textarea></label><div class="exam-settings-grid"><label>Inici<input id="exam-start" type="datetime-local" value="${esc(toLocalInput(e.start_at))}"></label><label>Final<input id="exam-end" type="datetime-local" value="${esc(toLocalInput(e.end_at))}"></label><label>Temps individual (min)<input id="exam-duration" type="number" min="1" max="480" value="${esc(e.duration_minutes??'')}"></label></div><div class="exam-lifecycle-actions"><button onclick="saveExamSettings(${e.id})">💾 Desa configuració</button><button class="secondary" onclick="setExamStatus(${e.id},'scheduled')">🗓 Programa</button><button class="secondary" onclick="setExamStatus(${e.id},'open')">▶ Obre ara</button><button class="return-btn" onclick="setExamStatus(${e.id},'closed')">■ Tanca</button><button class="delete-btn" onclick="deleteExam(${e.id})">🗑 Elimina examen</button></div><p id="exam-settings-msg"></p></section>
       <section class="card integrity-panel exam-safeguards"><h2>🛡 Salvaguardes d’integritat actives</h2><p>Durant l’examen es registren com a indicadors: <strong>ALERTA DE COPY-PASTE</strong> per enganxats de més d’una línia, insercions massives de text, blocs multilínia arrossegats, canvis de pestanya o finestra, sortides de pantalla completa i intents d’accés extern des del codi. Cap alerta prova per si sola l’ús d’IA; serveix perquè el professor revisi el cas.</p></section>
       <section class="exam-question-admin"><div class="exam-section-head"><div><h2>Exercicis</h2><p>${qs.length} exercicis · ${qs.reduce((n,q)=>n+Number(q.max_score||0),0)} punts totals</p></div></div>
       ${qs.map(q=>`<details class="card exam-question-edit"><summary><strong>${esc(q.position)}. ${esc(q.title)}</strong><span>${esc(q.max_score)} punts</span></summary><div class="exam-question-edit-body"><div class="exam-settings-grid"><label>Posició<input id="q-pos-${q.id}" type="number" min="1" value="${esc(q.position)}" ${locked?'disabled':''}></label><label>Punts<input id="q-score-${q.id}" type="number" min="0.1" step="0.1" value="${esc(q.max_score)}" ${locked?'disabled':''}></label><label>Títol<input id="q-title-${q.id}" value="${esc(q.title)}" ${locked?'disabled':''}></label></div><label>Enunciat<textarea id="q-statement-${q.id}" rows="5" ${locked?'disabled':''}>${esc(q.statement)}</textarea></label><label>Codi inicial<textarea id="q-starter-${q.id}" rows="7" ${locked?'disabled':''}>${esc(q.starter_code||'')}</textarea></label>${locked?'':`<div class="modal-actions"><button onclick="saveExamQuestion(${e.id},${q.id})">Desa exercici</button><button class="delete-btn" onclick="deleteExamQuestion(${e.id},${q.id})">Elimina</button></div>`}</div></details>`).join('')}
@@ -91,8 +91,28 @@ async function setExamStatus(id,status){
   }catch(e){alert(e.message)}
 }
 async function deleteExam(id){
-  if(!confirm('Eliminar definitivament aquest examen i els seus exercicis?'))return;
-  try{await api(`/api/teacher/exams/${id}`,{method:'DELETE'});teacherExams()}catch(e){alert(e.message)}
+  try{
+    const d=await api(`/api/teacher/exams/${id}`);
+    const e=d.exam||{},attempts=Number(e.attempt_count||0),questions=(d.questions||[]).length;
+    const first=confirm(
+      `Vols eliminar DEFINITIVAMENT l’examen “${e.title||'sense títol'}”?\n\n`+
+      `S’eliminaran també ${questions} exercici${questions===1?'':'s'} i ${attempts} intent${attempts===1?'':'s'} d’alumnes, inclosos codis, notes i alertes d’integritat.\n\nAquesta acció no es pot desfer.`
+    );
+    if(!first)return;
+
+    const second=prompt('Segona comprovació: escriu ELIMINAR en majúscules per confirmar l’esborrat definitiu.');
+    if(second!=='ELIMINAR'){
+      if(second!==null)alert('No s’ha eliminat l’examen: la segona confirmació no coincideix.');
+      return;
+    }
+
+    const result=await api(`/api/teacher/exams/${id}`,{
+      method:'DELETE',
+      body:JSON.stringify({confirm_text:'ELIMINAR'})
+    });
+    alert(`Examen eliminat definitivament. S’han eliminat ${Number(result.deleted_attempts||0)} intents.`);
+    await teacherExams();
+  }catch(e){alert(e.message)}
 }
 async function generateExamQuestion(examId){
   const select=$('#exam-generator-topic'),msg=$('#exam-generator-msg'),btn=$('#exam-generate-btn');
