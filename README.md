@@ -5,17 +5,15 @@ La via recomanada és pujar el projecte a GitHub des del navegador i connectar e
 
 ## Què inclou
 
-- registre d'alumnes
-- inici de sessió
+- registre d'alumnes i inici de sessió
 - recuperació de contrasenya amb codi temporal generat pel professor (sense correu)
-- curs amb capítols 1 i 2
-- activitats 1.1–1.3 i 2.1–2.4
-- editor Python al navegador amb Pyodide
-- execució i resultats
-- enviament d'entregues
-- historial d'entregues
-- proposta de correcció IA
-- API de professor per validar notes
+- curs complet de Programació 4ESO amb teoria i exercicis
+- editor Python al navegador amb Pyodide, inputs i desament d'esborranys
+- enviament, retorn, historial d'intents i validació de notes
+- proposta de correcció amb Cloudflare Workers AI
+- seguiment global i individual dels alumnes
+- sistema d'exàmens de programació: creació, programació, mode examen, autosave, lliurament i correcció
+- registre d'integritat dels exàmens: copy-paste multilínia, insercions massives, canvi de pestanya, sortida de pantalla completa, drag-and-drop multilínia i intents d'accés extern
 - Cloudflare Workers + D1
 
 ## Desplegament sense Node.js
@@ -80,17 +78,9 @@ Configuració:
 
 Cloudflare farà la instal·lació de Wrangler i el desplegament al seu propi entorn. **No cal Node.js local.**
 
-### 6. Configurar la clau de la IA
+### 6. IA de correcció
 
-Al Worker, ves a **Settings → Variables and Secrets** i crea un secret:
-
-`OPENAI_API_KEY`
-
-amb la teva clau de l'API del proveïdor que vulguis utilitzar.
-
-La clau no ha d'anar mai dins de `public/app.js`.
-
-> Nota: el nom del model és configurable amb `AI_MODEL`. Abans de producció cal posar-hi el model que realment tinguis disponible al teu proveïdor d'IA.
+La correcció assistida utilitza **Cloudflare Workers AI** mitjançant el binding `AI` definit a `wrangler.toml`. No cal desar cap clau d'OpenAI al repositori ni a les variables del Worker.
 
 ### 7. Domini propi
 
