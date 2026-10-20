@@ -588,6 +588,11 @@ async function api(req,env){
    attempt=await autoSubmitExpiredExam(env,exam,attempt);
    if(attempt.status!=='in_progress')return json({error:'Aquest examen ja està lliurat i no es pot tornar a començar.'},409);
   }
+  const questions=await env.DB.prepare('SELECT id,starter_code FROM exam_questions WHERE exam_id=?').bind(examId).all();
+  for(const q of questions.results||[]){
+   await env.DB.prepare(`INSERT OR IGNORE INTO exam_answers(attempt_id,question_id,code,stdin) VALUES(?,?,?, '')`)
+    .bind(attempt.id,q.id,q.starter_code||'').run();
+  }
   const qc=await env.DB.prepare('SELECT COUNT(*) total FROM exam_questions WHERE exam_id=?').bind(examId).first();
   return json({attempt,deadline:examAttemptDeadline(exam,attempt),question_count:Number(qc?.total||0)});
  }
