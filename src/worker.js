@@ -1,4 +1,4 @@
-const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json; charset=utf-8'}});
+const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const text = (data, status=200) => new Response(data, {status, headers:{'content-type':'text/plain; charset=utf-8'}});
 
 function b64u(bytes) { let s=''; for (const b of bytes) s+=String.fromCharCode(b); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
@@ -455,8 +455,11 @@ async function api(req,env){
   if(!title)return json({error:'El títol de l’examen és obligatori.'},400);
   const duration=Number(b.duration_minutes);
   const durationMinutes=Number.isFinite(duration)&&duration>0?Math.min(480,Math.round(duration)):null;
+  const startAt=b.start_at||null,endAt=b.end_at||null;
+  if(startAt&&endAt&&Date.parse(endAt)<=Date.parse(startAt))
+   return json({error:'La data de final ha de ser posterior a la d’inici.'},400);
   const row=await env.DB.prepare(`INSERT INTO exams(title,description,status,start_at,end_at,duration_minutes,created_by) VALUES(?,?,?,?,?,?,?) RETURNING *`)
-    .bind(title,description,'draft',b.start_at||null,b.end_at||null,durationMinutes,user.id).first();
+    .bind(title,description,'draft',startAt,endAt,durationMinutes,user.id).first();
   return json({exam:row},201);
  }
  if(/^\/api\/teacher\/exams\/\d+$/.test(path) && req.method==='GET' && user?.role==='teacher'){
@@ -505,6 +508,8 @@ async function api(req,env){
   const qc=await env.DB.prepare('SELECT COUNT(*) total FROM exam_questions WHERE exam_id=?').bind(id).first();
   if((status==='scheduled'||status==='open')&&!Number(qc?.total||0))return json({error:'Afegeix almenys un exercici abans d’obrir o programar l’examen.'},400);
   if(status==='scheduled'&&!exam.start_at)return json({error:'Per programar l’examen has d’indicar una data i hora d’inici.'},400);
+  if((status==='scheduled'||status==='open')&&exam.end_at&&Date.parse(exam.end_at)<=Date.now())
+   return json({error:'No pots obrir o programar un examen amb una data final que ja ha passat.'},400);
   if(status==='draft'&&await examHasAttempts(env,id))return json({error:'No es pot tornar a esborrany un examen que ja té intents.'},409);
   await env.DB.prepare('UPDATE exams SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,id).run();
   if(status==='closed'){
