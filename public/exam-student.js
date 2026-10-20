@@ -44,7 +44,10 @@ async function startExam(id){
     if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
     await api(`/api/exams/${id}/start`,{method:'POST',body:'{}'});
     await openExam(id);
-  }catch(e){alert(e.message)}
+  }catch(e){
+    if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    alert(e.message);
+  }
 }
 
 function examCleanup(){
@@ -276,6 +279,11 @@ async function examReview(){
   try{
     const fresh=await api(`/api/exams/${examSession.exam.id}/attempt`);
     examSession=fresh;examSession.answersMap=new Map((fresh.answers||[]).map(x=>[Number(x.question_id),x]));
+    if(fresh.attempt.status!=='in_progress'){
+      examCleanup();
+      renderSubmittedExam(fresh);
+      return;
+    }
     renderExamReview(false);
   }catch(e){alert(e.message)}
 }
