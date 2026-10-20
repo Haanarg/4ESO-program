@@ -205,7 +205,7 @@ function renderExamQuestion(){
     if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1){
       examIntegrityEvent('copy_paste',{lines:change.text.length,chars,area:'editor'});
       showExamWarning('⚠ ALERTA DE COPY-PASTE: s’ha registrat un enganxat de més d’una línia.');
-    }else if(change.origin!== 'setValue' && change.origin!=='paste' && chars>=120){
+    }else if(!['setValue','paste','undo','redo'].includes(change.origin) && chars>=120){
       examIntegrityEvent('large_insert',{chars,origin:change.origin||'unknown'});
       showExamWarning('⚠ S’ha registrat una inserció massiva de text al codi.');
     }
