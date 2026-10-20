@@ -1,3 +1,22 @@
+const EXAM_TOPIC_OPTIONS=[
+  [1,'Sortida (output)'],
+  [2,'Assignació de Variables'],
+  [3,'Entrada (Input)'],
+  [4,'Calcular'],
+  [5,'Selecció IF ELSE'],
+  [6,'Selecció ELIF'],
+  [7,'Iteracions'],
+  [8,'Llistes'],
+  [9,'Subrutines'],
+  [10,'Criptografia'],
+  [11,'Input Loop Adventure Game'],
+  [12,'Personal Database']
+];
+
+function examTopicOptions(){
+  return '<option value="">Tria un tema…</option>'+EXAM_TOPIC_OPTIONS.map(([n,name])=>`<option value="${n}">${n}. ${esc(name)}</option>`).join('');
+}
+
 async function teacherExams(){
   try{
     const d=await api('/api/teacher/exams'),items=d.exams||[];
@@ -27,7 +46,26 @@ async function teacherEditExam(id){
       <section class="card integrity-panel exam-safeguards"><h2>🛡 Salvaguardes d’integritat actives</h2><p>Durant l’examen es registren com a indicadors: <strong>ALERTA DE COPY-PASTE</strong> per enganxats de més d’una línia, insercions massives de text, blocs multilínia arrossegats, canvis de pestanya o finestra, sortides de pantalla completa i intents d’accés extern des del codi. Cap alerta prova per si sola l’ús d’IA; serveix perquè el professor revisi el cas.</p></section>
       <section class="exam-question-admin"><div class="exam-section-head"><div><h2>Exercicis</h2><p>${qs.length} exercicis · ${qs.reduce((n,q)=>n+Number(q.max_score||0),0)} punts totals</p></div></div>
       ${qs.map(q=>`<details class="card exam-question-edit"><summary><strong>${esc(q.position)}. ${esc(q.title)}</strong><span>${esc(q.max_score)} punts</span></summary><div class="exam-question-edit-body"><div class="exam-settings-grid"><label>Posició<input id="q-pos-${q.id}" type="number" min="1" value="${esc(q.position)}" ${locked?'disabled':''}></label><label>Punts<input id="q-score-${q.id}" type="number" min="0.1" step="0.1" value="${esc(q.max_score)}" ${locked?'disabled':''}></label><label>Títol<input id="q-title-${q.id}" value="${esc(q.title)}" ${locked?'disabled':''}></label></div><label>Enunciat<textarea id="q-statement-${q.id}" rows="5" ${locked?'disabled':''}>${esc(q.statement)}</textarea></label><label>Codi inicial<textarea id="q-starter-${q.id}" rows="7" ${locked?'disabled':''}>${esc(q.starter_code||'')}</textarea></label>${locked?'':`<div class="modal-actions"><button onclick="saveExamQuestion(${e.id},${q.id})">Desa exercici</button><button class="delete-btn" onclick="deleteExamQuestion(${e.id},${q.id})">Elimina</button></div>`}</div></details>`).join('')}
-      ${locked?'':`<div class="card exam-new-question"><h3>＋ Afegeix exercici</h3><div class="exam-settings-grid"><label>Títol<input id="new-q-title"></label><label>Punts<input id="new-q-score" type="number" min="0.1" step="0.1" value="10"></label></div><label>Enunciat<textarea id="new-q-statement" rows="5"></textarea></label><label>Codi inicial (opcional)<textarea id="new-q-starter" rows="7"></textarea></label><button onclick="addExamQuestion(${e.id})">Afegeix l’exercici</button><p id="new-q-msg"></p></div>`}
+      ${locked?'':`
+      <div class="card exam-question-generator">
+        <div class="exam-generator-head"><div><span class="pill">PER DEFECTE</span><h3>✨ Generador automàtic d’exercicis</h3></div></div>
+        <p>Tria el tema del curs. La IA generarà una proposta original limitada als conceptes treballats fins aquell tema, sense avançar continguts.</p>
+        <div class="exam-generator-controls">
+          <label>Tema<select id="exam-generator-topic">${examTopicOptions()}</select></label>
+          <button id="exam-generate-btn" onclick="generateExamQuestion(${e.id})">✨ Genera una proposta</button>
+        </div>
+        <p id="exam-generator-msg"></p>
+      </div>
+      <details id="manual-question-editor" class="card exam-new-question">
+        <summary><strong>✍ Creació manual / revisió de la proposta</strong><span>Pots crear l’exercici des de zero o editar el que ha generat la IA.</span></summary>
+        <div class="exam-manual-question-body">
+          <div class="exam-settings-grid"><label>Títol<input id="new-q-title"></label><label>Punts<input id="new-q-score" type="number" min="0.1" step="0.1" value="10"></label></div>
+          <label>Enunciat<textarea id="new-q-statement" rows="5"></textarea></label>
+          <label>Codi inicial (opcional)<textarea id="new-q-starter" rows="7"></textarea></label>
+          <button onclick="addExamQuestion(${e.id})">Afegeix l’exercici</button>
+          <p id="new-q-msg"></p>
+        </div>
+      </details>`}
       </section>`;
   }catch(e){alert(e.message);teacherExams()}
 }
@@ -56,6 +94,46 @@ async function deleteExam(id){
   if(!confirm('Eliminar definitivament aquest examen i els seus exercicis?'))return;
   try{await api(`/api/teacher/exams/${id}`,{method:'DELETE'});teacherExams()}catch(e){alert(e.message)}
 }
+async function generateExamQuestion(examId){
+  const select=$('#exam-generator-topic'),msg=$('#exam-generator-msg'),btn=$('#exam-generate-btn');
+  const chapter=Number(select?.value);
+  if(!chapter){
+    msg.textContent='Selecciona primer un tema del curs.';
+    msg.className='error';
+    select?.focus();
+    return;
+  }
+  btn.disabled=true;
+  btn.textContent='Generant…';
+  msg.textContent='Creant una proposta original i comprovant que no avanci continguts…';
+  msg.className='muted';
+  try{
+    const d=await api(`/api/teacher/exams/${examId}/generate-question`,{
+      method:'POST',
+      body:JSON.stringify({chapter})
+    });
+    const p=d.proposal||{};
+    $('#new-q-title').value=p.title||'';
+    $('#new-q-statement').value=p.statement||'';
+    $('#new-q-starter').value=p.starter_code||'';
+    $('#new-q-score').value=p.max_score||10;
+    const editor=$('#manual-question-editor');
+    if(editor)editor.open=true;
+    const concepts=Array.isArray(p.concepts_used)&&p.concepts_used.length
+      ? ' · Conceptes: '+p.concepts_used.join(', ')
+      : '';
+    msg.textContent=`✓ Proposta generada per al tema ${chapter}. Revisa-la i prem “Afegeix l’exercici” quan estigui bé.${concepts}`;
+    msg.className='reset-success';
+    $('#new-q-title')?.focus();
+  }catch(e){
+    msg.textContent=e.message;
+    msg.className='error';
+  }finally{
+    btn.disabled=false;
+    btn.textContent='✨ Genera una proposta';
+  }
+}
+
 async function addExamQuestion(examId){
   const msg=$('#new-q-msg');
   try{
