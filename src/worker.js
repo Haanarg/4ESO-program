@@ -610,9 +610,15 @@ async function api(req,env){
  if(/^\/api\/teacher\/exam-attempts\/\d+$/.test(path) && req.method==='GET' && user?.role==='teacher'){
   await ensureExamTables(env);
   const id=Number(path.split('/').pop());
-  const attempt=await env.DB.prepare(`SELECT a.*,u.name,u.email,e.title exam_title,e.description,e.duration_minutes,e.start_at,e.end_at
+  let attempt=await env.DB.prepare(`SELECT a.*,u.name,u.email,e.title exam_title,e.description,e.duration_minutes,e.start_at,e.end_at,e.status exam_status
     FROM exam_attempts a JOIN users u ON u.id=a.user_id JOIN exams e ON e.id=a.exam_id WHERE a.id=?`).bind(id).first();
   if(!attempt)return json({error:'Intent d’examen no trobat.'},404);
+  if(attempt.status==='in_progress'){
+   const checked=await autoSubmitExpiredExam(env,{
+    id:attempt.exam_id,title:attempt.exam_title,status:attempt.exam_status,start_at:attempt.start_at,end_at:attempt.end_at,duration_minutes:attempt.duration_minutes
+   },attempt);
+   attempt={...attempt,...checked};
+  }
   const questions=await env.DB.prepare('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY position,id').bind(attempt.exam_id).all();
   const answers=await env.DB.prepare('SELECT * FROM exam_answers WHERE attempt_id=?').bind(id).all();
   const events=await env.DB.prepare('SELECT * FROM exam_events WHERE attempt_id=? ORDER BY created_at,id').bind(id).all();
@@ -621,8 +627,12 @@ async function api(req,env){
  if(/^\/api\/teacher\/exam-attempts\/\d+\/grade$/.test(path) && req.method==='POST' && user?.role==='teacher'){
   await ensureExamTables(env);
   const id=Number(path.split('/')[4]);
-  const attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=?').bind(id).first();
+  let attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=?').bind(id).first();
   if(!attempt)return json({error:'Intent d’examen no trobat.'},404);
+  if(attempt.status==='in_progress'){
+   const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(attempt.exam_id).first();
+   attempt=await autoSubmitExpiredExam(env,exam,attempt);
+  }
   if(attempt.status==='in_progress')return json({error:'No es pot corregir un examen que encara està en curs.'},409);
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
   const questions=await env.DB.prepare('SELECT id,max_score FROM exam_questions WHERE exam_id=?').bind(attempt.exam_id).all();
