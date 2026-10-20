@@ -1,4 +1,4 @@
-let user=null, exercises=[], current=null, py=null, studentPreview=false, codeEditor=null, draftTimer=null, draftSaving=false, passwordResetCode=null;
+let user=null, exercises=[], current=null, py=null, studentPreview=false, codeEditor=null, draftTimer=null, draftSaving=false, passwordResetCode=null, exerciseIntegrityPending=[];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -300,8 +300,23 @@ async function dashboard(){
   ce.forEach(x=>{const sub=last[x.id];const status=sub?.status==='returned'?'<span class="status returned">↩ Retornada</span>':sub?.final_score!=null?`<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`:sub?.ai_result_json?'<span class="status pending">Pendent de validació</span>':drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'';const note=sub?.teacher_comment?`<div class="dashboard-teacher-note">💬 ${esc(sub.teacher_comment)}</div>`:'';$('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${x.id})"><span class="pill">${esc(x.type)}</span><h3>${esc(x.code)} · ${esc(x.title)}</h3><p>${esc(x.statement.slice(0,220))}${x.statement.length>220?'…':''}</p>${status}${note}</div>`);});
  }
 }
+function exerciseIntegrityEvent(eventType,meta={}){
+  if(studentPreview||!current?.id)return Promise.resolve();
+  const p=api(`/api/exercises/${current.id}/integrity-event`,{
+    method:'POST',
+    body:JSON.stringify({event_type:eventType,meta})
+  }).catch(()=>null);
+  exerciseIntegrityPending.push(p);
+  return p;
+}
+async function flushExerciseIntegrity(){
+  const pending=exerciseIntegrityPending.splice(0);
+  if(pending.length)await Promise.allSettled(pending);
+}
+
 async function openExercise(id){
  if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
+ exerciseIntegrityPending=[];
  if(draftTimer){clearTimeout(draftTimer);draftTimer=null} current=await api(`/api/exercises/${id}`);
  let savedDraft=null,history=[];if(!studentPreview){try{savedDraft=(await api(`/api/exercises/${id}/draft`)).draft}catch{}try{history=(await api('/api/my-submissions')).submissions.filter(s=>s.exercise_id===id)}catch{}}
  let rubric=[];try{rubric=JSON.parse(current.rubric_json||'[]')}catch{}
@@ -314,10 +329,28 @@ async function openExercise(id){
  const legacySolved94=current.code==='9.4' && savedDraft?.code?.length===1068 && savedDraft.code.startsWith('#Define four functions - add, subtract, multiply, divide') && savedDraft.code.endsWith('print(outputNum)');
  const editorCode=isReturned ? latestSubmission.code : (legacySolved94?current.starter_code:(savedDraft?.code??current.starter_code));
  const returnedFeedback=isReturned?`<div class="returned-feedback"><div><span class="status returned">↩ Retornada</span><h3>Comentaris del professor</h3></div><p>${latestSubmission.teacher_comment?esc(latestSubmission.teacher_comment):'El professor ha retornat aquesta tasca perquè la puguis revisar i tornar a enviar.'}</p>${latestSubmission.returned_score!=null?`<small>Nota de l'intent retornat: ${esc(latestSubmission.returned_score)}/10</small>`:''}</div>`:'';
- $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div><textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Escriu aquí les respostes <strong>abans de prémer Executar</strong>, una per línia i en el mateix ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false" placeholder="Exemple:&#10;Gaspar&#10;15"></textarea></div><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div><div class="output-heading"><h3>Sortida</h3><small>La pots redimensionar verticalment</small></div><div id="output" class="output resizable-output"></div><div id="grade"></div></section></div>`;
+ $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p id="exercise-statement" class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div><textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Escriu aquí les respostes <strong>abans de prémer Executar</strong>, una per línia i en el mateix ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false" placeholder="Exemple:&#10;Gaspar&#10;15"></textarea></div><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div><div class="output-heading"><h3>Sortida</h3><small>La pots redimensionar verticalment</small></div><div id="output" class="output resizable-output"></div><div id="grade"></div></section></div>`;
  codeEditor=CodeMirror.fromTextArea($('#code'),{mode:{name:'python',version:3,singleLineStringErrors:false},lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,lineWrapping:false,viewportMargin:Infinity,autofocus:true,extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}});
  codeEditor.setSize('100%','clamp(540px,70vh,860px)');
- if(!studentPreview)codeEditor.on('change',()=>{const st=$('#draft-status');if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}if(draftTimer)clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft(false),1800)});
+ if(!studentPreview){
+  codeEditor.on('change',()=>{const st=$('#draft-status');if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}if(draftTimer)clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft(false),1800)});
+  if(!submissionLocked){
+   codeEditor.on('beforeChange',(cm,change)=>{
+    if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1){
+     exerciseIntegrityEvent('copy_paste',{lines:change.text.length,chars:change.text.join('\n').length,area:'editor'});
+    }
+   });
+   const statement=$('#exercise-statement');
+   if(statement)statement.addEventListener('copy',()=>{
+    const selected=String(window.getSelection()?.toString()||'');
+    if(selected.trim().length<20)return;
+    exerciseIntegrityEvent('statement_copy',{
+     chars:selected.length,
+     near_full_statement:selected.length>=String(current.statement||'').length*.8
+    });
+   });
+  }
+ }
  setTimeout(()=>codeEditor.refresh(),0);
 }
 function toggleStatement(){const l=$('#exercise-layout'),p=$('#statement-panel'),b=$('.collapse-statement');const h=l.classList.toggle('statement-collapsed');p.classList.toggle('collapsed',h);b.textContent=h?'Enunciat ▶':'◀ Amaga enunciat';setTimeout(()=>codeEditor?.refresh(),80)}
@@ -408,6 +441,7 @@ async function submitCode(){
     if(draftTimer){clearTimeout(draftTimer);draftTimer=null}
     const code=codeEditor?codeEditor.getValue():$('#code').value; const tests=await localTests(code);
     $('#output').textContent=tests.map((t,i)=>`${t.passed?'✓':'✗'} Test ${i+1}${t.detail?' — '+String(t.detail).trim():''}`).join('\n')||'Sense tests automàtics configurats';
+    await flushExerciseIntegrity();
     const d=await api(`/api/exercises/${current.id}/submissions`,{method:'POST',body:JSON.stringify({code,tests})});
     const btn=$('#submit-btn');if(btn){btn.disabled=true;btn.textContent='✓ Enviat';btn.classList.add('submitted-lock');btn.title="Aquest exercici ja està enviat. Es reactivarà si el professor el retorna."}
     const ai=d.ai||{};
