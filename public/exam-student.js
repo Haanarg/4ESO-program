@@ -93,6 +93,33 @@ function showExamWarning(text){
   clearTimeout(showExamWarning._t);
   showExamWarning._t=setTimeout(()=>{if(box)box.hidden=true},5000);
 }
+function examBlockedNetworkUse(code){
+  const patterns=[
+    {name:'js',re:/^\s*(?:from\s+js\s+import|import\s+js\b)/m},
+    {name:'pyodide',re:/^\s*(?:from\s+pyodide(?:\.|\s)|import\s+pyodide\b)/m},
+    {name:'micropip',re:/^\s*(?:from\s+micropip\s+import|import\s+micropip\b)/m},
+    {name:'urllib.request',re:/^\s*(?:from\s+urllib(?:\.request)?\s+import|import\s+urllib\.request\b)/m},
+    {name:'http.client',re:/^\s*(?:from\s+http\.client\s+import|import\s+http\.client\b)/m},
+    {name:'socket',re:/^\s*(?:from\s+socket\s+import|import\s+socket\b)/m},
+    {name:'requests',re:/^\s*(?:from\s+requests\s+import|import\s+requests\b)/m},
+    {name:'aiohttp',re:/^\s*(?:from\s+aiohttp\s+import|import\s+aiohttp\b)/m},
+    {name:'httpx',re:/^\s*(?:from\s+httpx\s+import|import\s+httpx\b)/m},
+    {name:'webbrowser',re:/^\s*(?:from\s+webbrowser\s+import|import\s+webbrowser\b)/m},
+    {name:'dynamic_import',re:/\b(?:__import__|importlib)\b/}
+  ];
+  return patterns.find(x=>x.re.test(String(code||'')))?.name||null;
+}
+async function runExamCode(){
+  const code=codeEditor?.getValue()??'';
+  const blocked=examBlockedNetworkUse(code);
+  if(blocked){
+    await examIntegrityEvent('network_attempt',{blocked});
+    showExamWarning('⚠ Intent d’accés extern bloquejat en mode examen.');
+    const out=$('#output');if(out)out.textContent='Mode examen: no es permet accedir a Internet, al navegador ni instal·lar paquets externs.';
+    return;
+  }
+  return runCode();
+}
 
 async function openExam(id){
   try{
@@ -140,7 +167,7 @@ function renderExamQuestion(){
       <textarea id="code" spellcheck="false">${esc(ans.code??q.starter_code??'')}</textarea>
       <div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Una resposta per línia, en l’ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false"></textarea></div>
       <div class="editor-actions exam-editor-actions">
-        <button class="run-primary" onclick="runCode()">▶ Executa</button>
+        <button class="run-primary" onclick="runExamCode()">▶ Executa</button>
         <button class="secondary" onclick="examSaveCurrent(true)">💾 Desa ara</button>
         <span class="exam-spacer"></span>
         <button class="secondary" onclick="goExamQuestion(${examQuestionIndex-1})" ${examQuestionIndex===0?'disabled':''}>← Anterior</button>
