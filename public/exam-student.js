@@ -75,4 +75,84 @@ function bindExamIntegrity(){
   examIntegrityBound=true;
   examFullscreenWasActive=!!document.fullscreenElement;
   document.addEventListener('visibilitychange',examVisibilityHandler);
-  document.addEventList
+  document.addEventListener('fullscreenchange',examFullscreenHandler);
+  window.addEventListener('beforeunload',examBeforeUnload);
+}
+async function examIntegrityEvent(type,meta={}){
+  if(!examMode||!examSession?.attempt?.id)return;
+  try{
+    await api(`/api/exam-attempts/${examSession.attempt.id}/events`,{method:'POST',body:JSON.stringify({
+      event_type:type,question_id:examSession.questions?.[examQuestionIndex]?.id??null,meta
+    })});
+  }catch{}
+}
+function showExamWarning(text){
+  const box=$('#exam-integrity-warning');
+  if(!box)return;
+  box.textContent=text;box.hidden=false;
+  clearTimeout(showExamWarning._t);
+  showExamWarning._t=setTimeout(()=>{if(box)box.hidden=true},5000);
+}
+
+async function openExam(id){
+  try{
+    const d=await api(`/api/exams/${id}/attempt`);
+    examSession=d;
+    examSession.answersMap=new Map((d.answers||[]).map(x=>[Number(x.question_id),x]));
+    examQuestionIndex=0;
+    const inProgress=d.attempt.status==='in_progress';
+    if(!inProgress){
+      examCleanup();
+      return renderSubmittedExam(d);
+    }
+    examMode=true;nav();bindExamIntegrity();
+    renderExamQuestion();
+    if(examTimerInterval)clearInterval(examTimerInterval);
+    examTimerInterval=setInterval(updateExamTimer,1000);
+    updateExamTimer();
+  }catch(e){
+    examCleanup();
+    alert(e.message);dashboard();
+  }
+}
+function examAnswerFor(q){
+  return examSession?.answersMap?.get(Number(q.id))||{question_id:q.id,code:q.starter_code||'',stdin:''};
+}
+function renderExamQuestion(){
+  const s=examSession,q=s.questions[examQuestionIndex],ans=examAnswerFor(q);
+  const total=s.questions.length;
+  $('#app').innerHTML=`<div class="exam-shell">
+    <aside class="exam-sidebar">
+      <div class="exam-brand"><span>MODE EXAMEN</span><strong>${esc(s.exam.title)}</strong></div>
+      <div id="exam-timer" class="exam-timer">--:--</div>
+      <div class="exam-question-nav">${s.questions.map((x,i)=>{
+        const a=examAnswerFor(x),has=String(a.code||'').trim().length>0;
+        return `<button class="${i===examQuestionIndex?'active':''} ${has?'has-work':''}" onclick="goExamQuestion(${i})"><b>${i+1}</b><span>${esc(x.title)}</span></button>`;
+      }).join('')}</div>
+      <button class="secondary exam-review-btn" onclick="examReview()">Revisa i lliura</button>
+      <small class="exam-security-note">Desament automàtic actiu · controls d’integritat actius</small>
+    </aside>
+    <main class="exam-workspace">
+      <div id="exam-integrity-warning" class="exam-integrity-warning" hidden></div>
+      <div class="exam-question-head"><div><span class="pill">Exercici ${examQuestionIndex+1}/${total}</span><h1>${esc(q.title)}</h1></div><strong>${esc(q.max_score)} punts</strong></div>
+      <div class="exam-statement">${esc(q.statement)}</div>
+      <div class="editor-heading"><h2>Editor Python</h2><span id="exam-save-status" class="draft-status saved">✓ Desat</span></div>
+      <textarea id="code" spellcheck="false">${esc(ans.code??q.starter_code??'')}</textarea>
+      <div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Una resposta per línia, en l’ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false"></textarea></div>
+      <div class="editor-actions exam-editor-actions">
+        <button class="run-primary" onclick="runCode()">▶ Executa</button>
+        <button class="secondary" onclick="examSaveCurrent(true)">💾 Desa ara</button>
+        <span class="exam-spacer"></span>
+        <button class="secondary" onclick="goExamQuestion(${examQuestionIndex-1})" ${examQuestionIndex===0?'disabled':''}>← Anterior</button>
+        <button onclick="goExamQuestion(${examQuestionIndex+1})" ${examQuestionIndex===total-1?'disabled':''}>Següent →</button>
+      </div>
+      <div class="output-heading"><h3>Sortida</h3><small>Només execució local; no hi ha correcció ni pistes</small></div>
+      <div id="output" class="output resizable-output"></div>
+    </main>
+  </div>`;
+  $('#stdin').value=ans.stdin||'';
+  codeEditor=CodeMirror.fromTextArea($('#code'),{mode:{name:'python',version:3,singleLineStringErrors:false},lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,lineWrapping:false,viewportMargin:Infinity,autofocus:true,extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}});
+  codeEditor.setSize('100%','clamp(500px,64vh,780px)');
+  codeEditor.on('change',()=>scheduleExamSave());
+  codeEditor.on('beforeChange',(cm,change)=>{
+    if(change.origin===
