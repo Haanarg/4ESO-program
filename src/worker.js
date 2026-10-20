@@ -598,17 +598,21 @@ async function api(req,env){
   if(attempt.status==='in_progress')return json({error:'No es pot corregir un examen que encara està en curs.'},409);
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
   const questions=await env.DB.prepare('SELECT id,max_score FROM exam_questions WHERE exam_id=?').bind(attempt.exam_id).all();
-  const maxById=new Map((questions.results||[]).map(q=>[Number(q.id),Number(q.max_score||0)]));
   const scores=Array.isArray(b.scores)?b.scores:[];
+  const byQuestion=new Map(scores.map(x=>[Number(x.question_id),x]));
   let total=0,maxTotal=0;
-  for(const q of questions.results||[])maxTotal+=Number(q.max_score||0);
-  for(const entry of scores){
-   const qid=Number(entry.question_id);if(!maxById.has(qid))continue;
-   const max=maxById.get(qid),n=Number(entry.score),score=Number.isFinite(n)?Math.max(0,Math.min(max,n)):null;
+  for(const q of questions.results||[]){
+   const qid=Number(q.id),max=Number(q.max_score||0),entry=byQuestion.get(qid);
+   maxTotal+=max;
+   if(!entry || entry.score===null || entry.score===undefined || String(entry.score).trim()==='')
+    return json({error:'Has de posar una nota a tots els exercicis abans de desar la correcció.'},400);
+   const n=Number(entry.score);
+   if(!Number.isFinite(n)||n<0||n>max)
+    return json({error:`La nota de l'exercici ${qid} ha d'estar entre 0 i ${max}.`},400);
+   total+=n;
    const feedback=String(entry.feedback||'').slice(0,4000);
-   if(score!=null) total+=score;
    await env.DB.prepare(`INSERT INTO exam_answers(attempt_id,question_id,code,stdin,score,feedback) VALUES(?,?, '', '',?,?)
-     ON CONFLICT(attempt_id,question_id) DO UPDATE SET score=excluded.score,feedback=excluded.feedback`).bind(id,qid,score,feedback).run();
+     ON CONFLICT(attempt_id,question_id) DO UPDATE SET score=excluded.score,feedback=excluded.feedback`).bind(id,qid,n,feedback).run();
   }
   const finalScore=maxTotal>0?Math.round((total/maxTotal)*1000)/100:null;
   const comment=String(b.teacher_comment||'').slice(0,5000);
