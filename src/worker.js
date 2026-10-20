@@ -624,6 +624,18 @@ async function api(req,env){
   if(examState(exam)!=='active')return json({error:'Aquest examen no està obert ara mateix.'},409);
   let attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=?').bind(examId,user.id).first();
   if(!attempt){
+   const other=await env.DB.prepare(`SELECT a.*,e.title exam_title FROM exam_attempts a
+     JOIN exams e ON e.id=a.exam_id
+     WHERE a.user_id=? AND a.status='in_progress' AND a.exam_id<>?
+     ORDER BY a.started_at DESC LIMIT 1`).bind(user.id,examId).first();
+   if(other){
+    const otherExam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(other.exam_id).first();
+    const checked=await autoSubmitExpiredExam(env,otherExam,other);
+    if(checked.status==='in_progress') return json({
+      error:`Ja tens un examen en curs: ${other.exam_title}. Acaba'l o lliura'l abans de començar-ne un altre.`,
+      active_exam_id:other.exam_id
+    },409);
+   }
    const started=new Date().toISOString();
    attempt=await env.DB.prepare(`INSERT INTO exam_attempts(exam_id,user_id,status,started_at)
      VALUES(?,?, 'in_progress',?) RETURNING *`).bind(examId,user.id,started).first();
