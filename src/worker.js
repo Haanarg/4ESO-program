@@ -603,7 +603,8 @@ async function api(req,env){
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_exit_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline') drop_multiline_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='network_attempt') network_attempt_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='large_insert') large_insert_count
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='large_insert') large_insert_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='prompt_canary') prompt_canary_count
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY u.name COLLATE NOCASE`).bind(id).all();
   return json({exam:{...exam,effective_state:examState(exam)},questions:q.results||[],attempts:attempts.results||[]});
  }
@@ -763,6 +764,16 @@ async function api(req,env){
     ON CONFLICT(attempt_id,question_id) DO UPDATE SET
       code=excluded.code,stdin=excluded.stdin,updated_at=CURRENT_TIMESTAMP`)
     .bind(attemptId,questionId,code,stdin).run();
+  if(/\bprint\s*\(\s*(['"])Gotcha\1\s*\)/i.test(code)){
+   const prior=await env.DB.prepare(`SELECT id FROM exam_events
+     WHERE attempt_id=? AND question_id=? AND event_type='prompt_canary' LIMIT 1`)
+     .bind(attemptId,questionId).first();
+   if(!prior){
+    await env.DB.prepare(`INSERT INTO exam_events(attempt_id,question_id,event_type,meta_json)
+      VALUES(?,?, 'prompt_canary',?)`)
+      .bind(attemptId,questionId,JSON.stringify({marker:'print("Gotcha")'})).run();
+   }
+  }
   return json({ok:true,updated_at:new Date().toISOString()});
  }
  if(/^\/api\/exam-attempts\/\d+\/events$/.test(path) && req.method==='POST' && user?.role==='student'){
