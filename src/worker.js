@@ -774,6 +774,8 @@ async function api(req,env){
   )`).run();
   if(req.method==='DELETE'){
    await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id=?').bind(id).run();
+   await ensureExerciseIntegrityTable(env);
+   await env.DB.prepare('DELETE FROM exercise_integrity_events WHERE submission_id=?').bind(id).run();
    await env.DB.prepare('DELETE FROM submissions WHERE id=?').bind(id).run();
    return json({ok:true,deleted:id});
   }
@@ -1342,7 +1344,10 @@ pwd2 = input()
   const student=await env.DB.prepare(`SELECT id,name,email,role FROM users WHERE id=?`).bind(id).first();
   if(!student || student.role!=='student') return json({error:'Alumne no trobat.'},404);
   try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=?').bind(id).run();}catch{}
-  try{await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id IN (SELECT id FROM submissions WHERE user_id=?)').bind(id).run();}catch{} await env.DB.prepare('DELETE FROM submissions WHERE user_id=?').bind(id).run();
+  try{await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id IN (SELECT id FROM submissions WHERE user_id=?)').bind(id).run();}catch{}
+  await ensureExerciseIntegrityTable(env);
+  await env.DB.prepare('DELETE FROM exercise_integrity_events WHERE user_id=?').bind(id).run();
+  await env.DB.prepare('DELETE FROM submissions WHERE user_id=?').bind(id).run();
   await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
   await env.DB.prepare(`DELETE FROM users WHERE id=? AND role='student'`).bind(id).run();
   return json({ok:true,deleted:id});
@@ -1381,15 +1386,28 @@ pwd2 = input()
  }
  if(path==='/api/teacher/submissions' && user?.role==='teacher'){
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS submission_feedback(submission_id INTEGER PRIMARY KEY,teacher_comment TEXT NOT NULL DEFAULT '',returned_score REAL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
+ await ensureExerciseIntegrityTable(env);
  const rows=await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at,u.name,e.code AS exercise_code,e.title,e.statement,e.rubric_json,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id ORDER BY s.submitted_at DESC`).all();
- return json({submissions:rows.results})
+ const ev=await env.DB.prepare(`SELECT submission_id,event_type,meta_json,created_at FROM exercise_integrity_events WHERE submission_id IS NOT NULL ORDER BY id`).all();
+ const bySubmission=new Map();
+ for(const x of ev.results||[]){
+  const id=Number(x.submission_id);
+  if(!bySubmission.has(id))bySubmission.set(id,[]);
+  let meta={};try{meta=JSON.parse(x.meta_json||'{}')}catch{}
+  bySubmission.get(id).push({event_type:x.event_type,meta,created_at:x.created_at});
+ }
+ const submissions=(rows.results||[]).map(x=>({...x,integrity_events:bySubmission.get(Number(x.id))||[]}));
+ return json({submissions})
 }
  if(path.startsWith('/api/teacher/submissions/') && req.method==='DELETE' && user?.role==='teacher'){
   const id=Number(path.split('/').pop());
   if(!Number.isInteger(id)||id<1) return json({error:'Identificador d’entrega no vàlid.'},400);
   const existing=await env.DB.prepare('SELECT id FROM submissions WHERE id=?').bind(id).first();
   if(!existing) return json({error:'Entrega no trobada.'},404);
-  try{await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id=?').bind(id).run();}catch{} await env.DB.prepare('DELETE FROM submissions WHERE id=?').bind(id).run();
+  try{await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id=?').bind(id).run();}catch{}
+  await ensureExerciseIntegrityTable(env);
+  await env.DB.prepare('DELETE FROM exercise_integrity_events WHERE submission_id=?').bind(id).run();
+  await env.DB.prepare('DELETE FROM submissions WHERE id=?').bind(id).run();
   return json({ok:true,deleted:id});
  }
  if(path.startsWith('/api/teacher/submissions/') && req.method==='POST' && user?.role==='teacher'){
