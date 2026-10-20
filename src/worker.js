@@ -555,7 +555,8 @@ async function api(req,env){
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='tab_hidden') tab_hidden_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_exit_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline') drop_multiline_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='network_attempt') network_attempt_count
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='network_attempt') network_attempt_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='large_insert') large_insert_count
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY u.name COLLATE NOCASE`).bind(id).all();
   return json({exam:{...exam,effective_state:examState(exam)},questions:q.results||[],attempts:attempts.results||[]});
  }
@@ -696,7 +697,7 @@ async function api(req,env){
   if(attempt.status!=='in_progress')return json({ok:true,ignored:true});
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
   const type=String(b.event_type||'');
-  if(!['copy_paste','tab_hidden','fullscreen_exit','drop_multiline','network_attempt'].includes(type))
+  if(!['copy_paste','tab_hidden','fullscreen_exit','drop_multiline','network_attempt','large_insert'].includes(type))
    return json({error:'Tipus d’alerta no vàlid.'},400);
   const count=await env.DB.prepare('SELECT COUNT(*) total FROM exam_events WHERE attempt_id=?').bind(attemptId).first();
   if(Number(count?.total||0)>=500)return json({ok:true,ignored:true});
