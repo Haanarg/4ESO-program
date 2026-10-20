@@ -40,8 +40,26 @@ function studentExamCards(items){
 async function startExam(id){
   const ok=confirm('Vols començar l’examen ara?\n\nEn començar, el temps comptarà i la feina es desarà automàticament.');
   if(!ok)return;
+
+  if(!document.fullscreenElement){
+    if(!document.documentElement.requestFullscreen){
+      alert('Aquest navegador no permet iniciar l’examen en pantalla completa. Prova amb un navegador compatible.');
+      return;
+    }
+    try{
+      await document.documentElement.requestFullscreen();
+    }catch{
+      alert('Per començar l’examen has d’entrar en pantalla completa. L’examen encara no s’ha iniciat.');
+      return;
+    }
+  }
+
+  if(!document.fullscreenElement){
+    alert('No s’ha pogut activar la pantalla completa. L’examen encara no s’ha iniciat.');
+    return;
+  }
+
   try{
-    if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
     await api(`/api/exams/${id}/start`,{method:'POST',body:'{}'});
     await openExam(id);
   }catch(e){
