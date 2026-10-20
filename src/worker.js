@@ -512,9 +512,11 @@ function generatedExamViolations(chapter,candidate){
   const text=[candidate?.title,candidate?.statement,candidate?.starter_code].filter(Boolean).join("\n");
   const thresholds=[
     {min:3,label:"input",re:/\binput\s*\(|\bentrada\s+de\s+l['’]?usuari\b/i},
+    {min:3,label:"concatenació",re:/\bconcaten|\bunir\b[^\n]{0,30}\b(?:text|cadena)|\bcombinar\b[^\n]{0,30}\b(?:text|cadena)/i},
     {min:4,label:"càlculs",re:/\bint\s*\(|\bfloat\s*\(|\bcalcul(?:a|ar|i|s)\b|\bsum(?:a|ar)\b|\brest(?:a|ar)\b|\bmultiplic(?:a|ar)\b|\bdivid(?:eix|ir)\b/i},
     {min:5,label:"if/else",re:/\bif\b|\belse\b|\bcondici[oó]\b|\bcompar(?:a|ar|aci[oó])\b/i},
     {min:6,label:"elif",re:/\belif\b/i},
+    {min:7,label:"condicions compostes",re:/\band\b|\bor\b|\bnot\b/i},
     {min:7,label:"while",re:/\bwhile\b|\bbucle\b|\biteraci[oó]\b/i},
     {min:8,label:"llistes",re:/\bllist(?:a|es)\b|\bappend\s*\(|\binsert\s*\(|\bremove\s*\(|\bindex(?:aci[oó]|ar|ing)?\b|\bíndex\b/i},
     {min:9,label:"funcions",re:/\bdef\s+\w+\s*\(|\breturn\b|\bfunci[oó]\b|\bsubrutina\b|\bpar[aà]metr/i},
