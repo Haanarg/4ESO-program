@@ -904,6 +904,35 @@ async function api(req,env){
   return json({exam:{...updated,effective_state:examState(updated)}});
  }
  // EXÀMENS — professor: exercicis i correcció
+ if(/^\/api\/teacher\/exams\/\d+\/generate-question$/.test(path) && req.method==='POST' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const examId=Number(path.split('/')[4]);
+  const exam=await env.DB.prepare('SELECT id,title FROM exams WHERE id=?').bind(examId).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  if(await examHasAttempts(env,examId))return json({error:'No es poden generar exercicis quan l’examen ja té intents.'},409);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const chapter=Number(b.chapter);
+  const rules=EXAM_TOPIC_RULES[chapter];
+  if(!rules)return json({error:'Selecciona un tema vàlid del curs.'},400);
+  if(!env.AI)return json({error:'Workers AI no està disponible. Revisa el binding AI.'},503);
+
+  const base=await env.DB.prepare('SELECT code,title,statement FROM exercises WHERE chapter=? ORDER BY sort_order LIMIT 12').bind(chapter).all();
+  const current=await env.DB.prepare('SELECT title,statement FROM exam_questions WHERE exam_id=? ORDER BY position,id LIMIT 20').bind(examId).all();
+  const avoid=[
+   ...(base.results||[]).map(x=>`${x.code||''} · ${x.title}: ${x.statement}`),
+   ...(current.results||[]).map(x=>`Ja és en aquest examen · ${x.title}: ${x.statement}`)
+  ].join('\n').slice(0,9000);
+
+  try{
+   const proposal=await generateExamQuestionAI(env,chapter,avoid);
+   return json({
+    proposal:{...proposal,max_score:10},
+    topic:{chapter,name:rules.name,focus:rules.focus}
+   });
+  }catch(err){
+   return json({error:String(err?.message||err).slice(0,700)},502);
+  }
+ }
  if(/^\/api\/teacher\/exams\/\d+\/questions$/.test(path) && req.method==='POST' && user?.role==='teacher'){
   await ensureExamTables(env);
   const examId=Number(path.split('/')[4]);
