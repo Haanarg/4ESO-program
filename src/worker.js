@@ -418,6 +418,97 @@ async function api(req,env){
   const updated=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
   return json({exam:{...updated,effective_state:examState(updated)}});
  }
+ // EXÀMENS — professor: exercicis i correcció
+ if(/^\/api\/teacher\/exams\/\d+\/questions$/.test(path) && req.method==='POST' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const examId=Number(path.split('/')[4]);
+  const exam=await env.DB.prepare('SELECT id FROM exams WHERE id=?').bind(examId).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  if(await examHasAttempts(env,examId))return json({error:'No es poden modificar els exercicis quan l’examen ja té intents.'},409);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const title=String(b.title||'').trim().slice(0,180),statement=String(b.statement||'').trim().slice(0,12000),starter=String(b.starter_code||'').slice(0,30000);
+  if(!title||!statement)return json({error:'El títol i l’enunciat són obligatoris.'},400);
+  const mx=Number(b.max_score),maxScore=Number.isFinite(mx)&&mx>0?Math.min(100,mx):10;
+  const posRaw=Number(b.position);let position=Number.isFinite(posRaw)&&posRaw>0?Math.round(posRaw):null;
+  if(!position){const p=await env.DB.prepare('SELECT COALESCE(MAX(position),0)+1 p FROM exam_questions WHERE exam_id=?').bind(examId).first();position=Number(p?.p||1)}
+  const q=await env.DB.prepare(`INSERT INTO exam_questions(exam_id,position,title,statement,starter_code,max_score) VALUES(?,?,?,?,?,?) RETURNING *`)
+    .bind(examId,position,title,statement,starter,maxScore).first();
+  return json({question:q},201);
+ }
+ if(/^\/api\/teacher\/exam-questions\/\d+$/.test(path) && req.method==='PUT' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const qid=Number(path.split('/').pop());
+  const q=await env.DB.prepare('SELECT * FROM exam_questions WHERE id=?').bind(qid).first();
+  if(!q)return json({error:'Exercici d’examen no trobat.'},404);
+  if(await examHasAttempts(env,q.exam_id))return json({error:'No es poden modificar els exercicis quan l’examen ja té intents.'},409);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const title=String(b.title??q.title).trim().slice(0,180),statement=String(b.statement??q.statement).trim().slice(0,12000),starter=String(b.starter_code??q.starter_code).slice(0,30000);
+  const mx=Number(b.max_score??q.max_score),maxScore=Number.isFinite(mx)&&mx>0?Math.min(100,mx):Number(q.max_score||10);
+  const pp=Number(b.position??q.position),position=Number.isFinite(pp)&&pp>0?Math.round(pp):q.position;
+  if(!title||!statement)return json({error:'El títol i l’enunciat són obligatoris.'},400);
+  await env.DB.prepare(`UPDATE exam_questions SET position=?,title=?,statement=?,starter_code=?,max_score=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .bind(position,title,statement,starter,maxScore,qid).run();
+  return json({ok:true});
+ }
+ if(/^\/api\/teacher\/exam-questions\/\d+$/.test(path) && req.method==='DELETE' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const qid=Number(path.split('/').pop());
+  const q=await env.DB.prepare('SELECT * FROM exam_questions WHERE id=?').bind(qid).first();
+  if(!q)return json({error:'Exercici d’examen no trobat.'},404);
+  if(await examHasAttempts(env,q.exam_id))return json({error:'No es poden modificar els exercicis quan l’examen ja té intents.'},409);
+  await env.DB.prepare('DELETE FROM exam_questions WHERE id=?').bind(qid).run();
+  return json({ok:true});
+ }
+ if(/^\/api\/teacher\/exams\/\d+\/results$/.test(path) && req.method==='GET' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const id=Number(path.split('/')[4]);
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  const q=await env.DB.prepare('SELECT id,position,title,max_score FROM exam_questions WHERE exam_id=? ORDER BY position,id').bind(id).all();
+  const attempts=await env.DB.prepare(`SELECT a.*,u.name,u.email,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='copy_paste') copy_paste_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='tab_hidden') tab_hidden_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_exit_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline') drop_multiline_count
+    FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY u.name COLLATE NOCASE`).bind(id).all();
+  return json({exam:{...exam,effective_state:examState(exam)},questions:q.results||[],attempts:attempts.results||[]});
+ }
+ if(/^\/api\/teacher\/exam-attempts\/\d+$/.test(path) && req.method==='GET' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const id=Number(path.split('/').pop());
+  const attempt=await env.DB.prepare(`SELECT a.*,u.name,u.email,e.title exam_title,e.description,e.duration_minutes,e.start_at,e.end_at
+    FROM exam_attempts a JOIN users u ON u.id=a.user_id JOIN exams e ON e.id=a.exam_id WHERE a.id=?`).bind(id).first();
+  if(!attempt)return json({error:'Intent d’examen no trobat.'},404);
+  const questions=await env.DB.prepare('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY position,id').bind(attempt.exam_id).all();
+  const answers=await env.DB.prepare('SELECT * FROM exam_answers WHERE attempt_id=?').bind(id).all();
+  const events=await env.DB.prepare('SELECT * FROM exam_events WHERE attempt_id=? ORDER BY created_at,id').bind(id).all();
+  return json({attempt,questions:questions.results||[],answers:answers.results||[],events:events.results||[]});
+ }
+ if(/^\/api\/teacher\/exam-attempts\/\d+\/grade$/.test(path) && req.method==='POST' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const id=Number(path.split('/')[4]);
+  const attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=?').bind(id).first();
+  if(!attempt)return json({error:'Intent d’examen no trobat.'},404);
+  if(attempt.status==='in_progress')return json({error:'No es pot corregir un examen que encara està en curs.'},409);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const questions=await env.DB.prepare('SELECT id,max_score FROM exam_questions WHERE exam_id=?').bind(attempt.exam_id).all();
+  const maxById=new Map((questions.results||[]).map(q=>[Number(q.id),Number(q.max_score||0)]));
+  const scores=Array.isArray(b.scores)?b.scores:[];
+  let total=0,maxTotal=0;
+  for(const q of questions.results||[])maxTotal+=Number(q.max_score||0);
+  for(const entry of scores){
+   const qid=Number(entry.question_id);if(!maxById.has(qid))continue;
+   const max=maxById.get(qid),n=Number(entry.score),score=Number.isFinite(n)?Math.max(0,Math.min(max,n)):null;
+   const feedback=String(entry.feedback||'').slice(0,4000);
+   if(score!=null) total+=score;
+   await env.DB.prepare(`INSERT INTO exam_answers(attempt_id,question_id,code,stdin,score,feedback) VALUES(?,?, '', '',?,?)
+     ON CONFLICT(attempt_id,question_id) DO UPDATE SET score=excluded.score,feedback=excluded.feedback`).bind(id,qid,score,feedback).run();
+  }
+  const finalScore=maxTotal>0?Math.round((total/maxTotal)*1000)/100:null;
+  const comment=String(b.teacher_comment||'').slice(0,5000);
+  await env.DB.prepare(`UPDATE exam_attempts SET status='graded',final_score=?,teacher_comment=?,graded_at=CURRENT_TIMESTAMP WHERE id=?`).bind(finalScore,comment,id).run();
+  return json({ok:true,total,max_total:maxTotal,final_score:finalScore});
+ }
  if(path==='/api/exercises'){const rows=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json FROM exercises ORDER BY chapter,sort_order').all(); return json({exercises:rows.results})}
  if(/^\/api\/exercises\/\d+\/draft$/.test(path) && req.method==='GET'){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
