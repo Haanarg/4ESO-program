@@ -602,6 +602,25 @@ Retorna només el JSON estructurat demanat.`;
     parsed.starter_code=String(parsed.starter_code||"").slice(0,12000);
     parsed.concepts_used=Array.isArray(parsed.concepts_used)?parsed.concepts_used.filter(x=>rules.allowed.includes(x)):[];
     if(!parsed.title||!parsed.statement){lastError="proposta incompleta";continue}
+    const requiredByChapter={
+      1:["print"],
+      2:["variables"],
+      3:["input"],
+      4:["arithmetic"],
+      5:["if","else"],
+      6:["elif"],
+      7:["while"],
+      8:["lists"],
+      9:["def","parameters","return"],
+      10:["for","slicing","cryptography"],
+      11:["program_flow","def","parameters"],
+      12:["dictionaries","csv","matplotlib"]
+    };
+    const required=requiredByChapter[chapter]||[];
+    if(required.length && !parsed.concepts_used.some(x=>required.includes(x))){
+      lastError="no avalua de manera central cap concepte propi del tema seleccionat";
+      continue;
+    }
     const violations=generatedExamViolations(chapter,parsed);
     if(!violations.length) return parsed;
     lastError=violations.join(", ");
