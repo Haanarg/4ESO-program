@@ -148,6 +148,19 @@ async function examHasAttempts(env,examId){
  const row=await env.DB.prepare('SELECT id FROM exam_attempts WHERE exam_id=? LIMIT 1').bind(examId).first();
  return !!row;
 }
+async function syncExpiredExamAttempts(env,examId=null){
+ const sql=`SELECT a.*,e.status exam_status,e.start_at,e.end_at,e.duration_minutes,e.title exam_title
+   FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
+   WHERE a.status='in_progress'${examId==null?'':' AND a.exam_id=?'}`;
+ const rows=examId==null
+   ? await env.DB.prepare(sql).all()
+   : await env.DB.prepare(sql).bind(examId).all();
+ for(const a of rows.results||[]){
+  await autoSubmitExpiredExam(env,{
+   id:a.exam_id,title:a.exam_title,status:a.exam_status,start_at:a.start_at,end_at:a.end_at,duration_minutes:a.duration_minutes
+  },a);
+ }
+}
 
 function cookie(req){return req.headers.get('Cookie')?.match(/session=([^;]+)/)?.[1] || ''}
 async function auth(req,env){const t=cookie(req); if(!t)return null; const th=await sha256(t); const row=await env.DB.prepare('SELECT u.id,u.name,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(th,new Date().toISOString()).first(); return row||null;}
@@ -448,6 +461,7 @@ async function api(req,env){
  // EXÀMENS — professor: gestió
  if(path==='/api/teacher/exams' && req.method==='GET' && user?.role==='teacher'){
   await ensureExamTables(env);
+  await syncExpiredExamAttempts(env);
   const rows=await env.DB.prepare(`SELECT e.*,
     (SELECT COUNT(*) FROM exam_questions q WHERE q.exam_id=e.id) question_count,
     (SELECT COUNT(*) FROM exam_attempts a WHERE a.exam_id=e.id) attempt_count,
@@ -575,6 +589,7 @@ async function api(req,env){
   const id=Number(path.split('/')[4]);
   const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
   if(!exam)return json({error:'Examen no trobat.'},404);
+  await syncExpiredExamAttempts(env,id);
   if(examState(exam)==='closed'){
    const closedAt=new Date().toISOString();
    await env.DB.prepare(`UPDATE exam_attempts
