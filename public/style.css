@@ -475,3 +475,24 @@ main{max-width:1720px}
 .teacher-exam-output{margin:8px 0 12px;min-height:70px;max-height:240px;overflow:auto}
 
 .exam-fullscreen-btn{width:100%;margin:-4px 0 12px}
+
+.exam-question-generator{
+  margin-top:14px!important;
+  border-color:rgba(139,92,246,.36)!important;
+  background:linear-gradient(180deg,rgba(139,92,246,.075),rgba(14,23,38,.96))!important;
+}
+.exam-generator-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.exam-generator-head h3{margin:8px 0 0}
+.exam-generator-controls{display:grid;grid-template-columns:minmax(260px,1fr) auto;gap:12px;align-items:end;margin-top:14px}
+.exam-generator-controls label{display:block;font-size:12px;font-weight:750;color:#aab9ce}
+.exam-generator-controls select{width:100%;margin-top:6px}
+.exam-generator-controls button{min-height:42px;white-space:nowrap}
+.exam-new-question{padding:0!important;overflow:hidden}
+.exam-new-question>summary{display:flex;flex-direction:column;gap:4px;cursor:pointer;padding:16px 18px;background:#0e1828}
+.exam-new-question>summary span{font-size:12px;font-weight:500;color:#8fa3bd}
+.exam-new-question[open]>summary{border-bottom:1px solid #263750}
+.exam-manual-question-body{padding:18px}
+@media(max-width:760px){
+  .exam-generator-controls{grid-template-columns:1fr}
+  .exam-generator-controls button{width:100%}
+}
