@@ -496,3 +496,46 @@ main{max-width:1720px}
   .exam-generator-controls{grid-template-columns:1fr}
   .exam-generator-controls button{width:100%}
 }
+
+.normal-integrity-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:3px;
+  min-height:24px;
+  padding:3px 7px;
+  border-radius:999px;
+  border:1px solid rgba(247,198,92,.35);
+  background:rgba(247,198,92,.10);
+  color:#f7d98b;
+  font-weight:850;
+  font-size:12px;
+  line-height:1;
+}
+.normal-integrity-panel{
+  margin:12px 0 14px;
+  padding:12px 14px;
+  border:1px solid rgba(247,198,92,.32);
+  border-radius:10px;
+  background:rgba(247,198,92,.06);
+}
+.normal-integrity-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  color:#f7d98b;
+}
+.normal-integrity-title span{
+  display:inline-grid;
+  place-items:center;
+  min-width:24px;
+  height:24px;
+  padding:0 6px;
+  border-radius:999px;
+  background:rgba(247,198,92,.12);
+  font-weight:850;
+}
+.normal-integrity-panel ul{margin:9px 0 0;padding-left:20px}
+.normal-integrity-panel li{margin:6px 0;color:#dce6f3}
+.normal-integrity-panel li small{display:block;margin-top:2px;color:#8194ac}
