@@ -39,12 +39,14 @@ async function saveExamSettings(id){
       duration_minutes:$('#exam-duration').value||null
     })});
     msg.textContent='✓ Configuració desada';msg.className='reset-success';
-  }catch(e){msg.textContent=e.message;msg.className='error'}
+    return true;
+  }catch(e){msg.textContent=e.message;msg.className='error';return false}
 }
 async function setExamStatus(id,status){
-  if(status==='closed'&&!confirm('Tancar l’examen? Els intents en curs quedaran lliurats quan es tornin a sincronitzar.'))return;
+  if(status==='closed'&&!confirm('Tancar l’examen? Els intents que encara estiguin en curs quedaran lliurats automàticament.'))return;
   try{
-    await saveExamSettings(id);
+    const saved=await saveExamSettings(id);
+    if(!saved)return;
     await api(`/api/teacher/exams/${id}/status`,{method:'POST',body:JSON.stringify({status})});
     await teacherEditExam(id);
   }catch(e){alert(e.message)}
