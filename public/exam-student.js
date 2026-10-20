@@ -53,6 +53,7 @@ function examCleanup(){
   if(examTimerInterval){clearInterval(examTimerInterval);examTimerInterval=null}
   document.removeEventListener('visibilitychange',examVisibilityHandler);
   document.removeEventListener('fullscreenchange',examFullscreenHandler);
+  document.removeEventListener('paste',examGlobalPasteHandler,true);
   window.removeEventListener('beforeunload',examBeforeUnload);
   examIntegrityBound=false;
   examSaving=false;examDirty=false;examAutoSubmitting=false;
@@ -70,12 +71,23 @@ function examFullscreenHandler(){
   if(document.fullscreenElement) examFullscreenWasActive=true;
   else if(examFullscreenWasActive) examIntegrityEvent('fullscreen_exit',{at:new Date().toISOString()});
 }
+function examGlobalPasteHandler(e){
+  if(!examMode)return;
+  const target=e.target;
+  if(target?.closest?.('.CodeMirror')) return;
+  const text=e.clipboardData?.getData('text/plain')||'';
+  if(/\r?\n/.test(text)){
+    examIntegrityEvent('copy_paste',{lines:text.split(/\r?\n/).length,chars:text.length,area:target?.id||target?.tagName||'unknown'});
+    showExamWarning('⚠ ALERTA DE COPY-PASTE: s’ha registrat un enganxat de més d’una línia.');
+  }
+}
 function bindExamIntegrity(){
   if(examIntegrityBound)return;
   examIntegrityBound=true;
   examFullscreenWasActive=!!document.fullscreenElement;
   document.addEventListener('visibilitychange',examVisibilityHandler);
   document.addEventListener('fullscreenchange',examFullscreenHandler);
+  document.addEventListener('paste',examGlobalPasteHandler,true);
   window.addEventListener('beforeunload',examBeforeUnload);
 }
 async function examIntegrityEvent(type,meta={}){
@@ -182,10 +194,13 @@ function renderExamQuestion(){
   codeEditor.setSize('100%','clamp(500px,64vh,780px)');
   codeEditor.on('change',()=>scheduleExamSave());
   codeEditor.on('beforeChange',(cm,change)=>{
+    const chars=Array.isArray(change.text)?change.text.join('\n').length:0;
     if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1){
-      const chars=change.text.join('\n').length;
-      examIntegrityEvent('copy_paste',{lines:change.text.length,chars});
+      examIntegrityEvent('copy_paste',{lines:change.text.length,chars,area:'editor'});
       showExamWarning('⚠ ALERTA DE COPY-PASTE: s’ha registrat un enganxat de més d’una línia.');
+    }else if(change.origin!== 'setValue' && change.origin!=='paste' && chars>=120){
+      examIntegrityEvent('large_insert',{chars,origin:change.origin||'unknown'});
+      showExamWarning('⚠ S’ha registrat una inserció massiva de text al codi.');
     }
   });
   const wrap=codeEditor.getWrapperElement();
