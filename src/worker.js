@@ -552,6 +552,112 @@ async function api(req,env){
   await env.DB.prepare(`UPDATE exam_attempts SET status='graded',final_score=?,teacher_comment=?,graded_at=CURRENT_TIMESTAMP WHERE id=?`).bind(finalScore,comment,id).run();
   return json({ok:true,total,max_total:maxTotal,final_score:finalScore});
  }
+ // EXÀMENS — alumne
+ if(path==='/api/exams/available' && req.method==='GET' && user?.role==='student'){
+  await ensureExamTables(env);
+  const er=await env.DB.prepare(`SELECT e.*,(SELECT COUNT(*) FROM exam_questions q WHERE q.exam_id=e.id) question_count
+    FROM exams e WHERE e.status<>'draft' ORDER BY COALESCE(e.start_at,e.created_at),e.id`).all();
+  const ar=await env.DB.prepare('SELECT * FROM exam_attempts WHERE user_id=?').bind(user.id).all();
+  const attempts=new Map((ar.results||[]).map(a=>[Number(a.exam_id),a]));
+  const out=[];
+  for(const e of er.results||[]){
+   let attempt=attempts.get(Number(e.id))||null;
+   if(attempt) attempt=await autoSubmitExpiredExam(env,e,attempt);
+   const state=examState(e);
+   const visible=state==='active'||state==='upcoming'||!!attempt;
+   if(!visible)continue;
+   out.push({...e,effective_state:state,attempt:attempt?{
+    id:attempt.id,status:attempt.status,started_at:attempt.started_at,
+    submitted_at:attempt.submitted_at,graded_at:attempt.graded_at,final_score:attempt.final_score
+   }:null});
+  }
+  return json({exams:out});
+ }
+ if(/^\/api\/exams\/\d+\/start$/.test(path) && req.method==='POST' && user?.role==='student'){
+  await ensureExamTables(env);
+  const examId=Number(path.split('/')[3]);
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(examId).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  if(examState(exam)!=='active')return json({error:'Aquest examen no està obert ara mateix.'},409);
+  let attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=?').bind(examId,user.id).first();
+  if(!attempt){
+   const started=new Date().toISOString();
+   attempt=await env.DB.prepare(`INSERT INTO exam_attempts(exam_id,user_id,status,started_at)
+     VALUES(?,?, 'in_progress',?) RETURNING *`).bind(examId,user.id,started).first();
+  }else{
+   attempt=await autoSubmitExpiredExam(env,exam,attempt);
+   if(attempt.status!=='in_progress')return json({error:'Aquest examen ja està lliurat i no es pot tornar a començar.'},409);
+  }
+  const qc=await env.DB.prepare('SELECT COUNT(*) total FROM exam_questions WHERE exam_id=?').bind(examId).first();
+  return json({attempt,deadline:examAttemptDeadline(exam,attempt),question_count:Number(qc?.total||0)});
+ }
+ if(/^\/api\/exams\/\d+\/attempt$/.test(path) && req.method==='GET' && user?.role==='student'){
+  await ensureExamTables(env);
+  const examId=Number(path.split('/')[3]);
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(examId).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  let attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=?').bind(examId,user.id).first();
+  if(!attempt)return json({error:'Encara no has començat aquest examen.'},404);
+  attempt=await autoSubmitExpiredExam(env,exam,attempt);
+  const qr=await env.DB.prepare('SELECT id,position,title,statement,starter_code,max_score FROM exam_questions WHERE exam_id=? ORDER BY position,id').bind(examId).all();
+  const ans=await env.DB.prepare('SELECT question_id,code,stdin,updated_at,score,feedback FROM exam_answers WHERE attempt_id=?').bind(attempt.id).all();
+  return json({
+   exam:{...exam,effective_state:examState(exam)},
+   attempt,
+   deadline:examAttemptDeadline(exam,attempt),
+   questions:qr.results||[],
+   answers:ans.results||[]
+  });
+ }
+ if(/^\/api\/exam-attempts\/\d+\/answers\/\d+$/.test(path) && req.method==='PUT' && user?.role==='student'){
+  await ensureExamTables(env);
+  const parts=path.split('/'),attemptId=Number(parts[3]),questionId=Number(parts[5]);
+  const attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=? AND user_id=?').bind(attemptId,user.id).first();
+  if(!attempt)return json({error:'Intent no trobat.'},404);
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(attempt.exam_id).first();
+  const currentAttempt=await autoSubmitExpiredExam(env,exam,attempt);
+  if(currentAttempt.status!=='in_progress')return json({error:'Aquest examen ja no es pot modificar.'},409);
+  const q=await env.DB.prepare('SELECT id FROM exam_questions WHERE id=? AND exam_id=?').bind(questionId,attempt.exam_id).first();
+  if(!q)return json({error:'Exercici no trobat.'},404);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const code=String(b.code||'').slice(0,30000),stdin=String(b.stdin||'').slice(0,5000);
+  await env.DB.prepare(`INSERT INTO exam_answers(attempt_id,question_id,code,stdin,updated_at)
+    VALUES(?,?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(attempt_id,question_id) DO UPDATE SET
+      code=excluded.code,stdin=excluded.stdin,updated_at=CURRENT_TIMESTAMP`)
+    .bind(attemptId,questionId,code,stdin).run();
+  return json({ok:true,updated_at:new Date().toISOString()});
+ }
+ if(/^\/api\/exam-attempts\/\d+\/events$/.test(path) && req.method==='POST' && user?.role==='student'){
+  await ensureExamTables(env);
+  const attemptId=Number(path.split('/')[3]);
+  const attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=? AND user_id=?').bind(attemptId,user.id).first();
+  if(!attempt)return json({error:'Intent no trobat.'},404);
+  if(attempt.status!=='in_progress')return json({ok:true,ignored:true});
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const type=String(b.event_type||'');
+  if(!['copy_paste','tab_hidden','fullscreen_exit','drop_multiline'].includes(type))
+   return json({error:'Tipus d’alerta no vàlid.'},400);
+  const count=await env.DB.prepare('SELECT COUNT(*) total FROM exam_events WHERE attempt_id=?').bind(attemptId).first();
+  if(Number(count?.total||0)>=500)return json({ok:true,ignored:true});
+  const qid=b.question_id==null?null:Number(b.question_id);
+  const meta=JSON.stringify(b.meta&&typeof b.meta==='object'?b.meta:{}).slice(0,2000);
+  await env.DB.prepare('INSERT INTO exam_events(attempt_id,question_id,event_type,meta_json) VALUES(?,?,?,?)')
+    .bind(attemptId,qid,type,meta).run();
+  return json({ok:true});
+ }
+ if(/^\/api\/exam-attempts\/\d+\/submit$/.test(path) && req.method==='POST' && user?.role==='student'){
+  await ensureExamTables(env);
+  const attemptId=Number(path.split('/')[3]);
+  const attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=? AND user_id=?').bind(attemptId,user.id).first();
+  if(!attempt)return json({error:'Intent no trobat.'},404);
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(attempt.exam_id).first();
+  const checked=await autoSubmitExpiredExam(env,exam,attempt);
+  if(checked.status!=='in_progress')return json({error:'Aquest examen ja està lliurat.'},409);
+  const at=new Date().toISOString();
+  await env.DB.prepare(`UPDATE exam_attempts SET status='submitted',submitted_at=? WHERE id=? AND status='in_progress'`).bind(at,attemptId).run();
+  return json({ok:true,submitted_at:at});
+ }
  if(path==='/api/exercises'){const rows=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json FROM exercises ORDER BY chapter,sort_order').all(); return json({exercises:rows.results})}
  if(/^\/api\/exercises\/\d+\/draft$/.test(path) && req.method==='GET'){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
