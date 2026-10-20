@@ -919,10 +919,21 @@ async function api(req,env){
  if(/^\/api\/teacher\/exams\/\d+$/.test(path) && req.method==='DELETE' && user?.role==='teacher'){
   await ensureExamTables(env);
   const id=Number(path.split('/').pop());
-  if(await examHasAttempts(env,id))return json({error:'No es pot eliminar un examen que ja té intents d’alumnes.'},409);
-  await env.DB.prepare('DELETE FROM exam_questions WHERE exam_id=?').bind(id).run();
-  await env.DB.prepare('DELETE FROM exams WHERE id=?').bind(id).run();
-  return json({ok:true});
+  const exam=await env.DB.prepare('SELECT id,title FROM exams WHERE id=?').bind(id).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  let b={};try{b=await req.json()}catch{}
+  if(String(b.confirm_text||'')!=='ELIMINAR')
+   return json({error:'Falta la segona confirmació per eliminar l’examen.'},400);
+
+  const attemptCount=Number((await env.DB.prepare('SELECT COUNT(*) total FROM exam_attempts WHERE exam_id=?').bind(id).first())?.total||0);
+  await env.DB.batch([
+   env.DB.prepare('DELETE FROM exam_events WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id=?)').bind(id),
+   env.DB.prepare('DELETE FROM exam_answers WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id=?)').bind(id),
+   env.DB.prepare('DELETE FROM exam_attempts WHERE exam_id=?').bind(id),
+   env.DB.prepare('DELETE FROM exam_questions WHERE exam_id=?').bind(id),
+   env.DB.prepare('DELETE FROM exams WHERE id=?').bind(id)
+  ]);
+  return json({ok:true,deleted:id,deleted_attempts:attemptCount});
  }
  if(/^\/api\/teacher\/exams\/\d+\/status$/.test(path) && req.method==='POST' && user?.role==='teacher'){
   await ensureExamTables(env);
