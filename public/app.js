@@ -478,6 +478,23 @@ function toggleTeacherStatement(id){
   if(box) box.hidden=!box.hidden;
 }
 
+function exerciseIntegrityReason(ev){
+  const meta=ev?.meta||{};
+  if(ev?.event_type==='statement_copy'){
+    const detail=meta.near_full_statement?' · gairebé tot l’enunciat':'';
+    return `Còpia directa de l’enunciat${detail}${meta.chars?` · ${meta.chars} caràcters`:''}`;
+  }
+  if(ev?.event_type==='copy_paste'){
+    return `ALERTA DE COPY-PASTE · bloc de ${meta.lines||'?'} línies${meta.chars?` · ${meta.chars} caràcters`:''}`;
+  }
+  return String(ev?.event_type||'Alerta d’integritat');
+}
+function exerciseIntegrityTime(ev){
+  if(!ev?.created_at)return '';
+  const d=new Date(ev.created_at);
+  return Number.isNaN(d.getTime())?'':d.toLocaleString('ca-ES',{dateStyle:'short',timeStyle:'short'});
+}
+
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
@@ -491,9 +508,10 @@ async function teacherDashboard(){
       const status=returned?'returned':validated?'validated':'pending';
       const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':'Pendent';
       const proposed=s.final_score!=null?s.final_score:(s.returned_score!=null?s.returned_score:(ai.score??''));
+      const integrity=Array.isArray(s.integrity_events)?s.integrity_events:[];
       $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission compact-submission ${returned?'returned-submission':''}" data-status="${status}">
         <div class="compact-submission-main">
-          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span></div>
+          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span>${integrity.length?`<span class="normal-integrity-badge" title="${integrity.length} alerta${integrity.length===1?'':'es'} d’integritat">⚠${integrity.length>1?` ${integrity.length}`:''}</span>`:''}</div>
           <div class="compact-student"><strong>${esc(s.name)}</strong><span>${esc(s.title)}</span></div>
           <small class="compact-date">${esc(s.submitted_at)}</small>
           <button class="statement-btn secondary" onclick="event.stopPropagation();toggleTeacherStatement(${s.id})">📋 Enunciat</button>
@@ -506,7 +524,7 @@ async function teacherDashboard(){
         </div>
         <details class="compact-review">
           <summary>Corregir</summary>
-          
+          ${integrity.length?`<div class="normal-integrity-panel"><div class="normal-integrity-title"><strong>⚠ Alertes d’integritat</strong><span>${integrity.length}</span></div><ul>${integrity.map(ev=>`<li><strong>${esc(exerciseIntegrityReason(ev))}</strong>${exerciseIntegrityTime(ev)?`<small>${esc(exerciseIntegrityTime(ev))}</small>`:''}</li>`).join('')}</ul></div>`:''}
           <div class="compact-review-grid">
             <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
             <div class="compact-ai"><h4>Correcció IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</div>
