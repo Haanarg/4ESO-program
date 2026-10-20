@@ -418,6 +418,25 @@ async function api(req,env){
   ]);
   return json({ok:true});
  }
+ // Durant un examen en curs, l'alumne només pot utilitzar les API pròpies de l'examen.
+ if(user?.role==='student' && !path.startsWith('/api/exams/') && !path.startsWith('/api/exam-attempts/')){
+  await ensureExamTables(env);
+  const active=await env.DB.prepare(`SELECT a.*,e.title exam_title,e.status exam_status,e.start_at,e.end_at,e.duration_minutes
+    FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
+    WHERE a.user_id=? AND a.status='in_progress'
+    ORDER BY a.started_at DESC LIMIT 1`).bind(user.id).first();
+  if(active){
+   const checked=await autoSubmitExpiredExam(env,{
+    id:active.exam_id,title:active.exam_title,status:active.exam_status,start_at:active.start_at,
+    end_at:active.end_at,duration_minutes:active.duration_minutes
+   },active);
+   if(checked.status==='in_progress') return json({
+    error:`Tens un examen en curs: ${active.exam_title}. Torna a l'entorn de l'examen abans de continuar.`,
+    code:'EXAM_IN_PROGRESS',
+    active_exam_id:active.exam_id
+   },423);
+  }
+ }
  // EXÀMENS — professor: gestió
  if(path==='/api/teacher/exams' && req.method==='GET' && user?.role==='teacher'){
   await ensureExamTables(env);
