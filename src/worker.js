@@ -305,6 +305,49 @@ async function api(req,env){
 }
  if(path==='/api/login' && req.method==='POST'){const b=await req.json(); const r=await env.DB.prepare('SELECT id,name,email,password_hash,role FROM users WHERE email=?').bind((b.email||'').toLowerCase().trim()).first(); if(!r||!(await passwordOk(b.password||'',r.password_hash)))return json({error:'Credencials incorrectes.'},401); delete r.password_hash; return session(r,env)}
  if(path==='/api/me') return json({user});
+ const teacherSubmissionAction=path.match(/^\/api\/teacher\/submissions\/(\d+)\/?$/);
+ if(teacherSubmissionAction && (req.method==='POST'||req.method==='DELETE')){
+  if(!user)return json({error:'Cal iniciar sessió.'},401);
+  if(user.role!=='teacher')return json({error:'Accés restringit al professor.'},403);
+  const id=Number(teacherSubmissionAction[1]);
+  const existing=await env.DB.prepare('SELECT id,final_score FROM submissions WHERE id=?').bind(id).first();
+  if(!existing)return json({error:'Entrega no trobada.'},404);
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS submission_feedback(
+    submission_id INTEGER PRIMARY KEY,
+    teacher_comment TEXT NOT NULL DEFAULT '',
+    returned_score REAL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  if(req.method==='DELETE'){
+   await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id=?').bind(id).run();
+   await env.DB.prepare('DELETE FROM submissions WHERE id=?').bind(id).run();
+   return json({ok:true,deleted:id});
+  }
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const comment=String(b.comment||'').trim().slice(0,4000);
+  if(b.action==='return'){
+   const proposed=Number(b.score);
+   const kept=Number.isFinite(proposed)&&proposed>=0&&proposed<=10?proposed:(existing.final_score??null);
+   await env.DB.prepare(`INSERT INTO submission_feedback(submission_id,teacher_comment,returned_score,updated_at)
+     VALUES(?,?,?,CURRENT_TIMESTAMP)
+     ON CONFLICT(submission_id) DO UPDATE SET
+       teacher_comment=excluded.teacher_comment,
+       returned_score=excluded.returned_score,
+       updated_at=CURRENT_TIMESTAMP`).bind(id,comment,kept).run();
+   await env.DB.prepare("UPDATE submissions SET status='returned',final_score=NULL,validated_at=CURRENT_TIMESTAMP WHERE id=?").bind(id).run();
+   return json({ok:true,status:'returned'});
+  }
+  const score=Number(b.score);
+  if(!Number.isFinite(score)||score<0||score>10)return json({error:'La nota ha de ser entre 0 i 10.'},400);
+  await env.DB.prepare(`INSERT INTO submission_feedback(submission_id,teacher_comment,returned_score,updated_at)
+    VALUES(?,?,NULL,CURRENT_TIMESTAMP)
+    ON CONFLICT(submission_id) DO UPDATE SET
+      teacher_comment=excluded.teacher_comment,
+      returned_score=NULL,
+      updated_at=CURRENT_TIMESTAMP`).bind(id,comment).run();
+  await env.DB.prepare("UPDATE submissions SET final_score=?,status='validated',validated_at=CURRENT_TIMESTAMP WHERE id=?").bind(score,id).run();
+  return json({ok:true,status:'validated'});
+ }
  if(path==='/api/logout'){const t=cookie(req);if(t)await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(t)).run();return new Response('',{status:204,headers:{'Set-Cookie':'session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0'}})}
  if(/^\/api\/teacher\/students\/\d+\/password-reset$/.test(path) && req.method==='POST' && user?.role==='teacher'){
   const id=Number(path.split('/')[4]);
