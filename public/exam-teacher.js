@@ -78,7 +78,7 @@ async function deleteExamQuestion(examId,qid){
   try{await api(`/api/teacher/exam-questions/${qid}`,{method:'DELETE'});teacherEditExam(examId)}catch(e){alert(e.message)}
 }
 function examAlertTotal(a){
-  return Number(a.copy_paste_count||0)+Number(a.tab_hidden_count||0)+Number(a.fullscreen_exit_count||0)+Number(a.drop_multiline_count||0);
+  return Number(a.copy_paste_count||0)+Number(a.tab_hidden_count||0)+Number(a.fullscreen_exit_count||0)+Number(a.drop_multiline_count||0)+Number(a.network_attempt_count||0);
 }
 async function teacherExamResults(examId){
   try{
@@ -88,7 +88,7 @@ async function teacherExamResults(examId){
   }catch(e){alert(e.message);teacherExams()}
 }
 function integrityEventLabel(type){
-  return ({copy_paste:'ALERTA DE COPY-PASTE',tab_hidden:'Canvi de pestanya/finestra',fullscreen_exit:'Sortida de pantalla completa',drop_multiline:'Bloc multilínia arrossegat'})[type]||type;
+  return ({copy_paste:'ALERTA DE COPY-PASTE',tab_hidden:'Canvi de pestanya/finestra',fullscreen_exit:'Sortida de pantalla completa',drop_multiline:'Bloc multilínia arrossegat',network_attempt:'Intent d’accés extern bloquejat'})[type]||type;
 }
 async function teacherGradeExamAttempt(id){
   try{
