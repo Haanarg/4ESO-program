@@ -269,12 +269,13 @@ function renderTheory(md){
   flushTable();closeLists();if(inCode)h+=`<pre class="theory-code"><code>${esc(code.join('\n'))}</code></pre>`;return h;
 }
 function openTheory(chapter){
+ if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
  const names={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
  const md=COURSE_THEORY?.[chapter]||COURSE_THEORY?.[String(chapter)]||'';
  $('#app').innerHTML=`${studentPreview?`<div class="preview-banner compact"><strong>👁 Vista d'alumne</strong><button class="secondary" onclick="exitStudentPreview()">← Panell professor</button></div>`:''}<article class="card theory-page"><div class="theory-eyebrow">📖 Teoria · Capítol ${chapter}</div><div class="theory-content">${renderTheory(md)}</div><div class="theory-footer"><button class="secondary" onclick="dashboard()">← Índex del curs</button><button onclick="openFirstExercise(${chapter})">Comença els exercicis →</button></div></article>`;
  window.scrollTo({top:0,behavior:'smooth'});
 }
-function openFirstExercise(chapter){const e=exercises.find(x=>x.chapter===chapter);if(e)openExercise(e.id);else dashboard()}
+function openFirstExercise(chapter){if(typeof examMode!=='undefined'&&examMode){if(typeof renderExamQuestion==='function'&&examSession)renderExamQuestion();return}const e=exercises.find(x=>x.chapter===chapter);if(e)openExercise(e.id);else dashboard()}
 async function dashboard(){
  if(typeof examCleanup==='function' && typeof examMode!=='undefined' && examMode) examCleanup();
  let examItems=[];
@@ -300,6 +301,7 @@ async function dashboard(){
  }
 }
 async function openExercise(id){
+ if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
  if(draftTimer){clearTimeout(draftTimer);draftTimer=null} current=await api(`/api/exercises/${id}`);
  let savedDraft=null,history=[];if(!studentPreview){try{savedDraft=(await api(`/api/exercises/${id}/draft`)).draft}catch{}try{history=(await api('/api/my-submissions')).submissions.filter(s=>s.exercise_id===id)}catch{}}
  let rubric=[];try{rubric=JSON.parse(current.rubric_json||'[]')}catch{}
