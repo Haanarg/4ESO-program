@@ -155,4 +155,115 @@ function renderExamQuestion(){
   codeEditor.setSize('100%','clamp(500px,64vh,780px)');
   codeEditor.on('change',()=>scheduleExamSave());
   codeEditor.on('beforeChange',(cm,change)=>{
-    if(change.origin===
+    if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1){
+      const chars=change.text.join('\n').length;
+      examIntegrityEvent('copy_paste',{lines:change.text.length,chars});
+      showExamWarning('⚠ ALERTA DE COPY-PASTE: s’ha registrat un enganxat de més d’una línia.');
+    }
+  });
+  const wrap=codeEditor.getWrapperElement();
+  wrap.addEventListener('drop',e=>{
+    const t=e.dataTransfer?.getData('text/plain')||'';
+    if(/\r?\n/.test(t)){
+      examIntegrityEvent('drop_multiline',{lines:t.split(/\r?\n/).length,chars:t.length});
+      showExamWarning('⚠ S’ha registrat l’arrossegament d’dun bloc multilinia.');
+    }
+  });
+  $('#stdin').addEventListener('input',scheduleExamSave);
+  setTimeout(()=>codeEditor.refresh(),0);
+  updateExamTimer();
+}
+function scheduleExamSave(){
+  if(!examMode)return;
+  const st=$('#exam-save-status');if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}
+  if(examSaveTimer)clearTimeout(examSaveTimer);
+  examSaveTimer=setTimeout(()=>examSaveCurrent(false),1000);
+}
+async function examSaveCurrent(manual=false){
+  if(!examMode||!examSession?.attempt?.id||!examSession.questions?.length)return true;
+  if(examSaveTimer){clearTimeout(examSaveTimer);examSaveTimer=null}
+  if(examSaving){examDirty=true;return false}
+  examSaving=true;examDirty=false;
+  const q=examSession.questions[examQuestionIndex],code=codeEditor?.getValue()??'',stdin=$('#stdin')?.value||'';
+  const st=$('#exam-save-status');if(st){st.textContent='Desant…';st.className='draft-status saving'}
+  try{
+    await api(`/api/exam-attempts/${examSession.attempt.id}/answers/${q.id}`,{method:'PUT',body:JSON.stringify({code,stdin})});
+    examSession.answersMap.set(Number(q.id),{...(examAnswerFor(q)),question_id:q.id,code,stdin,updated_at:new Date().toISOString()});
+    if(st){st.textContent='✓ Desat';st.className='draft-status saved'}
+    return true;
+  }catch(e){
+    if(st){st.textContent='⚠ Error de desament';st.className='draft-status save-error';st.title=e.message}
+    if(manual)alert(`No s’ha pogut desar: ${e.message}`);
+    return false;
+  }finally{
+    examSaving=false;
+    if(examDirty){examDirty=false;setTimeout(()=>examSaveCurrent(false),0)}
+  }
+}
+async function goExamQuestion(index){
+  if(index<0||index>=examSession.questions.length||index===examQuestionIndex)return;
+  const ok=await examSaveCurrent(true);if(!ok)return;
+  examQuestionIndex=index;renderExamQuestion();
+}
+function updateExamTimer(){
+  if(!examMode||!examSession)return;
+  const el=$('#exam-timer'),deadline=examSession.deadline;
+  if(!el)return;
+  if(!deadline){el.textContent='Sense límit';return}
+  const left=Date.parse(deadline)-Date.now();
+  if(left<=0){
+    el.textContent='00:00';el.classList.add('danger');
+    if(!examAutoSubmitting) examAutoSubmit();
+    return;
+  }
+  const sec=Math.floor(left/1000),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),ss=sec%60;
+  el.textContent=h?`${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`:`${m}:${String(ss).padStart(2,'0')}`;
+  el.classList.toggle('danger',left<5*60*1000);
+}
+async function examAutoSubmit(){
+  examAutoSubmitting=true;
+  try{await examSaveCurrent(false)}catch{}
+  try{await api(`/api/exam-attempts/${examSession.attempt.id}/submit`,{method:'POST',body:'{}'})}catch{}
+  const examId=examSession.exam.id;
+  examCleanup();
+  alert('El temps de l’examen ha acabat. S’ha lliurat automàticament la feina desada.');
+  try{await openExam(examId)}catch{dashboard()}
+}
+async function examReview(){
+  const ok=await examSaveCurrent(true);if(!ok)return;
+  try{
+    const fresh=await api(`/api/exams/${examSession.exam.id}/attempt`);
+    examSession=fresh;examSession.answersMap=new Map((fresh.answers||[]).map(x=>[Number(x.question_id),x]));
+    renderExamReview(false);
+  }catch(e){alert(e.message)}
+}
+function renderExamReview(readOnly=false){
+  const s=examSession;
+  $('#app').innerHTML=`<div class="exam-review-page">
+    <div class="exam-review-head"><div><span class="pill">${readOnly?'LLIURAT':'REVISIÓ FINAL'}</span><h1>${esc(s.exam.title)}</h1><p>${readOnly?'Aquesta és la còpia desada del teu lliurament.':'Revisa tots els exercicis abans de lliurar. Encara pots tornar enrere i editar.'}</p></div>${!readOnly?'<div id="exam-timer" class="exam-timer">--:--</div>':''}</div>
+    <div class="exam-review-list">${s.questions.map((q,i)=>{
+      const a=examAnswerFor(q),empty=!String(a.code||'').trim();
+      return `<article class="card exam-review-item"><div class="exam-review-item-head"><h2>${i+1}. ${esc(q.title)}</h2><span class="${empty?'exam-empty':'exam-done'}">${empty?'Sense codi':'Desat'}</span></div><p>${esc(q.statement)}</p><pre>${esc(a.code||'')}</pre>${a.stdin?`<details><summary>Entrades de prova</summary><pre>${esc(a.stdin)}</pre></details>`:''}${readOnly&&a.score!=null?`<div class="exam-answer-grade"><strong>${esc(a.score)}/${esc(q.max_score)}</strong>${a.feedback?`<p>${esc(a.feedback)}</p>`:''}</div>`:''}</article>`;
+    }).join('')}</div>
+    ${readOnly
+      ? `<div class="card exam-final-result">${s.attempt.status==='graded'?`<h2>Nota: ${esc(s.attempt.final_score??'—')}/10</h2>${s.attempt.teacher_comment?`<p>${esc(s.attempt.teacher_comment)}</p>`:''}`:'<h2>Examen lliurat</h2><p>Pendent de correcció del professor.</p>'}<button onclick="dashboard()">← Torna al curs</button></div>`
+      : `<div class="card exam-submit-box"><label class="exam-confirm-check"><input id="exam-confirm-check" type="checkbox" onchange="$('#exam-final-submit').disabled=!this.checked"> He revisat les respostes i sé que, un cop lliurat, no podré modificar l’examen.</label><div><button class="secondary" onclick="renderExamQuestion()">← Continua editant</button><button id="exam-final-submit" onclick="submitExamFinal()" disabled>Lliura definitivament</button></div></div>`}
+  </div>`;
+  if(!readOnly){updateExamTimer()}
+}
+async function submitExamFinal(){
+  if(!$('#exam-confirm-check')?.checked)return;
+  if(!confirm('Segona confirmació:\n\nVols lliurar DEFINITIVAMENT l’examen? Després no podràs editar cap resposta.'))return;
+  try{
+    await api(`/api/exam-attempts/${examSession.attempt.id}/submit`,{method:'POST',body:'{}'});
+    const id=examSession.exam.id;
+    examCleanup();
+    if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+    await openExam(id);
+  }catch(e){alert(e.message)}
+}
+function renderSubmittedExam(d){
+  examSession=d;examSession.answersMap=new Map((d.answers||[]).map(x=>[Number(x.question_id),x]));
+  renderExamReview(true);
+}
+
