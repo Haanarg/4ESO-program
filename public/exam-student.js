@@ -68,7 +68,10 @@ function examBeforeUnload(e){
   e.preventDefault();e.returnValue='';
 }
 function examVisibilityHandler(){
-  if(examMode && document.hidden) examIntegrityEvent('tab_hidden',{at:new Date().toISOString()});
+  if(examMode && document.hidden){
+    examSaveCurrent(false);
+    examIntegrityEvent('tab_hidden',{at:new Date().toISOString()});
+  }
 }
 function examFullscreenHandler(){
   if(!examMode)return;
