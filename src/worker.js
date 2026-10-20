@@ -34,6 +34,28 @@ async function ensurePasswordResetTable(env){
  )`).run();
  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash)').run();
 }
+let exerciseIntegritySchemaReady=false, exerciseIntegritySchemaPromise=null;
+async function ensureExerciseIntegrityTable(env){
+ if(exerciseIntegritySchemaReady)return;
+ if(exerciseIntegritySchemaPromise)return exerciseIntegritySchemaPromise;
+ exerciseIntegritySchemaPromise=(async()=>{
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS exercise_integrity_events(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    exercise_id INTEGER NOT NULL,
+    submission_id INTEGER,
+    event_type TEXT NOT NULL,
+    meta_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exercise_integrity_user_exercise ON exercise_integrity_events(user_id,exercise_id,submission_id)').run();
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exercise_integrity_submission ON exercise_integrity_events(submission_id,created_at)').run();
+  exerciseIntegritySchemaReady=true;
+ })();
+ try{await exerciseIntegritySchemaPromise}
+ catch(err){exerciseIntegritySchemaPromise=null;throw err}
+}
+
 const RESET_CODE_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function normalizeResetCode(code){return String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
 function newPasswordResetCode(){
@@ -1265,6 +1287,22 @@ pwd2 = input()
 # - repeteix la petició de contrasenya fins que sigui correcta
 # - compta quants intents ha necessitat l'usuari
 # - mostra el nom d'usuari i el nombre d'intents al missatge final`; if(e)e.starter_code=starterForExercise(e); return e?json(e):json({error:'No trobat'},404)}
+ if(/^\/api\/exercises\/\d+\/integrity-event$/.test(path) && req.method==='POST'){
+  if(!user || user.role!=='student')return json({error:'Cal iniciar sessió com a alumne.'},401);
+  const exerciseId=Number(path.split('/')[3]);
+  const exercise=await env.DB.prepare('SELECT id FROM exercises WHERE id=?').bind(exerciseId).first();
+  if(!exercise)return json({error:'Exercici no trobat.'},404);
+  const latest=await env.DB.prepare('SELECT id,status FROM submissions WHERE user_id=? AND exercise_id=? ORDER BY id DESC LIMIT 1').bind(user.id,exerciseId).first();
+  if(latest && latest.status!=='returned')return json({ok:true,ignored:true});
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const type=String(b.event_type||'');
+  if(!['statement_copy','copy_paste'].includes(type))return json({error:'Tipus d’alerta no vàlid.'},400);
+  const meta=b.meta&&typeof b.meta==='object'?b.meta:{};
+  await ensureExerciseIntegrityTable(env);
+  await env.DB.prepare(`INSERT INTO exercise_integrity_events(user_id,exercise_id,submission_id,event_type,meta_json)
+    VALUES(?,?,NULL,?,?)`).bind(user.id,exerciseId,type,JSON.stringify(meta).slice(0,2000)).run();
+  return json({ok:true});
+ }
  if(path.startsWith('/api/exercises/') && path.endsWith('/submissions') && req.method==='POST'){
  if(!user)return json({error:'Cal iniciar sessió.'},401);
  const id=path.split('/')[3];
@@ -1275,6 +1313,8 @@ pwd2 = input()
  const b=await req.json();const code=String(b.code||'').slice(0,30000);
  const ai=await aiGrade(env,e,code,b.tests||[]);
  const result=await env.DB.prepare('INSERT INTO submissions(user_id,exercise_id,code,test_results_json,ai_result_json,status) VALUES(?,?,?,?,?,?) RETURNING id,submitted_at').bind(user.id,e.id,code,JSON.stringify(b.tests||[]),JSON.stringify(ai),'pending').first();
+ await ensureExerciseIntegrityTable(env);
+ await env.DB.prepare('UPDATE exercise_integrity_events SET submission_id=? WHERE user_id=? AND exercise_id=? AND submission_id IS NULL').bind(result.id,user.id,e.id).run();
  try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=? AND exercise_id=?').bind(user.id,e.id).run();}catch{}
  return json({submission:result,ai})
 }
