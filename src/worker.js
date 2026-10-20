@@ -249,6 +249,366 @@ function starterForExercise(exercise){
 
 async function seed(env){const n=await env.DB.prepare('SELECT COUNT(*) AS total FROM exercises').first(); if(Number(n?.total||0)>=seedExercises.length)return; for(const e of seedExercises){await env.DB.prepare(`INSERT OR IGNORE INTO exercises(chapter,code,title,type,statement,starter_code,reference_solution,rubric_json,tests_json,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(e.chapter,e.code,e.title,e.type,e.statement,correctedStarters[e.code]??e.starter,e.solution,JSON.stringify(e.rubric),JSON.stringify(e.tests),parseFloat(e.code)).run();}}
 
+const EXAM_TOPIC_RULES={
+  "1": {
+    "name": "Sortida (output)",
+    "focus": "print(), literals de cadena i seqüències simples de sortida",
+    "allowed": [
+      "print",
+      "strings"
+    ],
+    "limits": "No utilitzis variables, input, càlculs, condicionals, bucles, llistes ni funcions."
+  },
+  "2": {
+    "name": "Assignació de Variables",
+    "focus": "crear variables, assignar-hi dades i usar-les en print()",
+    "allowed": [
+      "print",
+      "strings",
+      "variables"
+    ],
+    "limits": "No utilitzis input, càlculs, condicionals, bucles, llistes ni funcions."
+  },
+  "3": {
+    "name": "Entrada (Input)",
+    "focus": "input(), variables, sortida i concatenació de text",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation"
+    ],
+    "limits": "No utilitzis càlculs numèrics, int()/float(), condicionals, bucles, llistes ni funcions."
+  },
+  "4": {
+    "name": "Calcular",
+    "focus": "càlculs simples amb +, -, *, / i //, variables, int(input()) i conversió bàsica per mostrar resultats",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic"
+    ],
+    "limits": "No utilitzis %, condicionals, bucles, llistes ni funcions."
+  },
+  "5": {
+    "name": "Selecció IF ELSE",
+    "focus": "condicions booleanes simples, comparadors, if i if/else",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "else",
+      "comparisons"
+    ],
+    "limits": "No utilitzis elif, bucles, llistes, funcions ni condicions compostes sofisticades."
+  },
+  "6": {
+    "name": "Selecció ELIF",
+    "focus": "cadenes if/elif/else per gestionar tres o més resultats",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "elif",
+      "else",
+      "comparisons"
+    ],
+    "limits": "No utilitzis bucles, llistes ni funcions."
+  },
+  "7": {
+    "name": "Iteracions",
+    "focus": "bucles while, condicions de bucle i comptadors",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "elif",
+      "else",
+      "comparisons",
+      "while",
+      "counters"
+    ],
+    "limits": "No utilitzis for, llistes, funcions ni tècniques avançades de bucles."
+  },
+  "8": {
+    "name": "Llistes",
+    "focus": "crear i mostrar llistes, accedir i canviar elements per índex, append(), insert() i eliminar elements",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "elif",
+      "else",
+      "comparisons",
+      "while",
+      "counters",
+      "lists",
+      "indexing",
+      "append",
+      "insert",
+      "remove",
+      "len"
+    ],
+    "limits": "No utilitzis bucles for, funcions definides amb def, comprensions ni estructures de dades més avançades."
+  },
+  "9": {
+    "name": "Subrutines",
+    "focus": "definir i cridar funcions, paràmetres, arguments i return",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "elif",
+      "else",
+      "comparisons",
+      "while",
+      "counters",
+      "lists",
+      "indexing",
+      "append",
+      "insert",
+      "remove",
+      "len",
+      "def",
+      "parameters",
+      "return"
+    ],
+    "limits": "No utilitzis for, criptografia, fitxers, classes, recursió ni tècniques no treballades."
+  },
+  "10": {
+    "name": "Criptografia",
+    "focus": "indexació i slicing de cadenes/llistes, bucles for, funcions i xifrats històrics senzills com Caesar, substitució o Vigenère",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "elif",
+      "else",
+      "comparisons",
+      "while",
+      "counters",
+      "lists",
+      "indexing",
+      "append",
+      "insert",
+      "remove",
+      "len",
+      "def",
+      "parameters",
+      "return",
+      "for",
+      "slicing",
+      "string_methods",
+      "cryptography"
+    ],
+    "limits": "No utilitzis classes, recursió, comprensions, fitxers, llibreries externes ni RSA per defecte; RSA és ampliació."
+  },
+  "11": {
+    "name": "Input Loop Adventure Game",
+    "focus": "funcions amb arguments, if/elif/else, variables locals/globals i un bucle d'entrada per controlar un programa de text",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "elif",
+      "else",
+      "comparisons",
+      "while",
+      "counters",
+      "lists",
+      "indexing",
+      "append",
+      "insert",
+      "remove",
+      "len",
+      "def",
+      "parameters",
+      "return",
+      "for",
+      "slicing",
+      "string_methods",
+      "program_flow"
+    ],
+    "limits": "L'exercici ha de ser curt i examinable; no exigeixis un projecte llarg, fitxers, gràfics, classes ni llibreries externes."
+  },
+  "12": {
+    "name": "Personal Database",
+    "focus": "diccionaris simples per organitzar registres, CSV bàsic o visualització elemental amb matplotlib.pyplot",
+    "allowed": [
+      "print",
+      "strings",
+      "variables",
+      "input",
+      "concatenation",
+      "int",
+      "arithmetic",
+      "if",
+      "elif",
+      "else",
+      "comparisons",
+      "while",
+      "counters",
+      "lists",
+      "indexing",
+      "append",
+      "insert",
+      "remove",
+      "len",
+      "def",
+      "parameters",
+      "return",
+      "for",
+      "slicing",
+      "string_methods",
+      "dictionaries",
+      "csv",
+      "matplotlib"
+    ],
+    "limits": "Tria una sola habilitat central (diccionari, CSV o gràfic) i mantén l'exercici curt. No utilitzis pandas, numpy, classes, xarxa ni tècniques de ciència de dades avançades."
+  }
+};
+
+function generatedExamViolations(chapter,candidate){
+  const text=[candidate?.title,candidate?.statement,candidate?.starter_code].filter(Boolean).join("\n");
+  const thresholds=[
+    {min:3,label:"input",re:/\binput\s*\(|\bentrada\s+de\s+l['’]?usuari\b/i},
+    {min:4,label:"càlculs",re:/\bint\s*\(|\bfloat\s*\(|\bcalcul(?:a|ar|i|s)\b|\bsum(?:a|ar)\b|\brest(?:a|ar)\b|\bmultiplic(?:a|ar)\b|\bdivid(?:eix|ir)\b/i},
+    {min:5,label:"if/else",re:/\bif\b|\belse\b|\bcondici[oó]\b|\bcompar(?:a|ar|aci[oó])\b/i},
+    {min:6,label:"elif",re:/\belif\b/i},
+    {min:7,label:"while",re:/\bwhile\b|\bbucle\b|\biteraci[oó]\b/i},
+    {min:8,label:"llistes",re:/\bllist(?:a|es)\b|\bappend\s*\(|\binsert\s*\(|\bremove\s*\(|\bindex(?:aci[oó]|ar|ing)?\b|\bíndex\b/i},
+    {min:9,label:"funcions",re:/\bdef\s+\w+\s*\(|\breturn\b|\bfunci[oó]\b|\bsubrutina\b|\bpar[aà]metr/i},
+    {min:10,label:"for/criptografia",re:/\bfor\b|\bslicing\b|\bxifrat\b|\bcriptograf|\bcaesar\b|\bvigen[eè]re\b|\brsa\b/i},
+    {min:12,label:"dades/gràfics",re:/\bdiccionari\b|\bcsv\b|\bmatplotlib\b|\bpyplot\b|\bgr[aà]fic\b/i}
+  ];
+  const violations=[];
+  for(const rule of thresholds) if(chapter<rule.min && rule.re.test(text)) violations.push(rule.label);
+  const common=[
+    ["classes",/\bclass\s+\w+/i],
+    ["async/await",/\basync\b|\bawait\b/i],
+    ["lambda",/\blambda\b/i],
+    ["comprensions",/\[[^\]\n]+\bfor\b[^\]\n]+\]/i],
+    ["recursió",/\brecursi[oó]\b/i],
+    ["xarxa/API",/\brequests\b|\baiohttp\b|\bhttpx\b|\bsocket\b|\bAPI\b/i]
+  ];
+  for(const [label,re] of common) if(re.test(text)) violations.push(label);
+  if(chapter<12 && /\bimport\s+\w+|\bfrom\s+\w+\s+import\b/i.test(String(candidate?.starter_code||""))) violations.push("imports");
+  if(chapter===12 && /\bimport\s+(?!csv\b|matplotlib\b)|\bfrom\s+(?!matplotlib\b)/i.test(String(candidate?.starter_code||""))) violations.push("import no permès");
+  return [...new Set(violations)];
+}
+
+async function generateExamQuestionAI(env,chapter,avoidText){
+  const rules=EXAM_TOPIC_RULES[chapter];
+  if(!rules) throw new Error("Tema no vàlid.");
+  if(!env.AI) throw new Error("Workers AI no està vinculat al Worker.");
+  const schema={
+    type:"object",
+    properties:{
+      title:{type:"string"},
+      statement:{type:"string"},
+      starter_code:{type:"string"},
+      concepts_used:{type:"array",items:{type:"string",enum:rules.allowed}}
+    },
+    required:["title","statement","starter_code","concepts_used"]
+  };
+  let lastError="";
+  for(let n=0;n<2;n++){
+    const prompt=`Ets un professor de Programació Python de 4t d'ESO a Catalunya.
+Has de crear UNA proposta original d'exercici d'examen, escrita en català.
+
+TEMA ${chapter}: ${rules.name}
+CONCEPTES CENTRALS DEL TEMA:
+${rules.focus}
+
+CONCEPTES PERMESOS:
+${rules.allowed.join(", ")}
+
+LÍMITS OBLIGATORIS:
+${rules.limits}
+
+REGLES ESTRICTES:
+- Avalua principalment els conceptes del tema seleccionat i només coneixements ja treballats abans.
+- NO introdueixis cap concepte més avançat que aquest tema.
+- Crea una tasca de programació de tipus construir: l'alumne ha d'escriure o completar codi.
+- Ha de ser resoluble aproximadament en 10-20 minuts per un alumne de 4t d'ESO.
+- L'enunciat ha de ser precís: indica entrades, comportament esperat i sortida quan sigui necessari.
+- No donis la solució ni pseudocodi que resolgui la part principal.
+- starter_code pot contenir comentaris, dades inicials o preparació mínima, però NO pot resoldre el concepte que s'avalua.
+- Evita trucs, ambigüitats i coneixements de fora del curs.
+- No demanis instal·lar paquets, accedir a Internet ni llegir documentació externa.
+- L'exercici ha de ser ORIGINAL i no una simple còpia amb noms canviats dels exemples següents.
+- concepts_used ha de contenir exclusivament valors de la llista CONCEPTES PERMESOS.
+
+EXEMPLES QUE HAS D'EVITAR REPETIR O PARAFRASEJAR:
+${avoidText||"(cap)"}
+
+${lastError?`La proposta anterior s'ha rebutjat perquè introduïa: ${lastError}. Genera'n una de nova corregint-ho.`:""}
+
+Retorna només el JSON estructurat demanat.`;
+    const result=await env.AI.run(env.AI_MODEL||"@cf/meta/llama-3.3-70b-instruct-fp8-fast",{
+      messages:[
+        {role:"system",content:"Genera exercicis escolars estrictament limitats al temari indicat. No avancis continguts."},
+        {role:"user",content:prompt}
+      ],
+      response_format:{type:"json_schema",json_schema:schema},
+      temperature:0.75,
+      max_tokens:1100
+    });
+    let parsed=result?.response ?? result;
+    if(typeof parsed==="string") parsed=JSON.parse(parsed);
+    if(!parsed||typeof parsed!=="object") throw new Error("Workers AI no ha retornat una proposta vàlida.");
+    parsed.title=String(parsed.title||"").trim().slice(0,180);
+    parsed.statement=String(parsed.statement||"").trim().slice(0,6000);
+    parsed.starter_code=String(parsed.starter_code||"").slice(0,12000);
+    parsed.concepts_used=Array.isArray(parsed.concepts_used)?parsed.concepts_used.filter(x=>rules.allowed.includes(x)):[];
+    if(!parsed.title||!parsed.statement){lastError="proposta incompleta";continue}
+    const violations=generatedExamViolations(chapter,parsed);
+    if(!violations.length) return parsed;
+    lastError=violations.join(", ");
+  }
+  throw new Error("La IA no ha pogut generar una proposta dins dels límits exactes del tema. Torna-ho a provar.");
+}
+
 async function aiGrade(env, exercise, code, tests){
   if(!env.AI) return {score:null,feedback:"Workers AI encara no està vinculat al Worker. Afegeix una vinculació Workers AI amb el nom AI.",teacher_feedback:"Falta el binding de Workers AI: env.AI.",criteria:[],strengths:[],errors:[],hints:[],teacher_warning:"Workers AI no configurat",configured:false};
 
