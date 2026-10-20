@@ -1,4 +1,4 @@
-let examMode=false, examSession=null, examQuestionIndex=0, examSaveTimer=null, examTimerInterval=null, examIntegrityBound=false, examFullscreenWasActive=false, examSaving=false, examDirty=false, examAutoSubmitting=false;
+let examMode=false, examSession=null, examQuestionIndex=0, examSaveTimer=null, examTimerInterval=null, examIntegrityBound=false, examFullscreenWasActive=false, examSaving=false, examDirty=false, examAutoSubmitting=false, examServerOffsetMs=0;
 
 function examStateLabel(state){
   return ({draft:'Esborrany',upcoming:'Programat',active:'Obert',closed:'Tancat'})[state]||state||'—';
@@ -140,6 +140,7 @@ async function openExam(id){
   try{
     const d=await api(`/api/exams/${id}/attempt`);
     examSession=d;
+    examServerOffsetMs=d.server_now?Date.parse(d.server_now)-Date.now():0;
     examSession.answersMap=new Map((d.answers||[]).map(x=>[Number(x.question_id),x]));
     examQuestionIndex=0;
     const inProgress=d.attempt.status==='in_progress';
@@ -255,7 +256,7 @@ function updateExamTimer(){
   const el=$('#exam-timer'),deadline=examSession.deadline;
   if(!el)return;
   if(!deadline){el.textContent='Sense límit';return}
-  const left=Date.parse(deadline)-Date.now();
+  const left=Date.parse(deadline)-(Date.now()+examServerOffsetMs);
   if(left<=0){
     el.textContent='00:00';el.classList.add('danger');
     if(!examAutoSubmitting) examAutoSubmit();
@@ -278,7 +279,7 @@ async function examReview(){
   const ok=await examSaveCurrent(true);if(!ok)return;
   try{
     const fresh=await api(`/api/exams/${examSession.exam.id}/attempt`);
-    examSession=fresh;examSession.answersMap=new Map((fresh.answers||[]).map(x=>[Number(x.question_id),x]));
+    examSession=fresh;examServerOffsetMs=fresh.server_now?Date.parse(fresh.server_now)-Date.now():examServerOffsetMs;examSession.answersMap=new Map((fresh.answers||[]).map(x=>[Number(x.question_id),x]));
     if(fresh.attempt.status!=='in_progress'){
       examCleanup();
       renderSubmittedExam(fresh);
