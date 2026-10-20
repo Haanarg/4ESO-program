@@ -604,7 +604,7 @@ async function api(req,env){
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline') drop_multiline_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='network_attempt') network_attempt_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='large_insert') large_insert_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='prompt_canary') prompt_canary_count
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='statement_copy') statement_copy_count
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY u.name COLLATE NOCASE`).bind(id).all();
   return json({exam:{...exam,effective_state:examState(exam)},questions:q.results||[],attempts:attempts.results||[]});
  }
@@ -764,16 +764,6 @@ async function api(req,env){
     ON CONFLICT(attempt_id,question_id) DO UPDATE SET
       code=excluded.code,stdin=excluded.stdin,updated_at=CURRENT_TIMESTAMP`)
     .bind(attemptId,questionId,code,stdin).run();
-  if(/\bprint\s*\(\s*(['"])Gotcha\1\s*\)/i.test(code)){
-   const prior=await env.DB.prepare(`SELECT id FROM exam_events
-     WHERE attempt_id=? AND question_id=? AND event_type='prompt_canary' LIMIT 1`)
-     .bind(attemptId,questionId).first();
-   if(!prior){
-    await env.DB.prepare(`INSERT INTO exam_events(attempt_id,question_id,event_type,meta_json)
-      VALUES(?,?, 'prompt_canary',?)`)
-      .bind(attemptId,questionId,JSON.stringify({marker:'print("Gotcha")'})).run();
-   }
-  }
   return json({ok:true,updated_at:new Date().toISOString()});
  }
  if(/^\/api\/exam-attempts\/\d+\/events$/.test(path) && req.method==='POST' && user?.role==='student'){
@@ -784,7 +774,7 @@ async function api(req,env){
   if(attempt.status!=='in_progress')return json({ok:true,ignored:true});
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
   const type=String(b.event_type||'');
-  if(!['copy_paste','tab_hidden','fullscreen_exit','drop_multiline','network_attempt','large_insert'].includes(type))
+  if(!['copy_paste','tab_hidden','fullscreen_exit','drop_multiline','network_attempt','large_insert','statement_copy'].includes(type))
    return json({error:'Tipus d’alerta no vàlid.'},400);
   const count=await env.DB.prepare('SELECT COUNT(*) total FROM exam_events WHERE attempt_id=?').bind(attemptId).first();
   if(Number(count?.total||0)>=500)return json({ok:true,ignored:true});
