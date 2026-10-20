@@ -678,7 +678,7 @@ async function api(req,env){
     .bind(attempt.id,q.id,q.starter_code||'').run();
   }
   const qc=await env.DB.prepare('SELECT COUNT(*) total FROM exam_questions WHERE exam_id=?').bind(examId).first();
-  return json({attempt,deadline:examAttemptDeadline(exam,attempt),question_count:Number(qc?.total||0)});
+  return json({attempt,deadline:examAttemptDeadline(exam,attempt),question_count:Number(qc?.total||0),server_now:new Date().toISOString()});
  }
  if(/^\/api\/exams\/\d+\/attempt$/.test(path) && req.method==='GET' && user?.role==='student'){
   await ensureExamTables(env);
@@ -694,6 +694,7 @@ async function api(req,env){
    exam:{...exam,effective_state:examState(exam)},
    attempt,
    deadline:examAttemptDeadline(exam,attempt),
+   server_now:new Date().toISOString(),
    questions:qr.results||[],
    answers:ans.results||[]
   });
