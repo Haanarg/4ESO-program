@@ -73,10 +73,19 @@ function examVisibilityHandler(){
     examIntegrityEvent('tab_hidden',{at:new Date().toISOString()});
   }
 }
+function syncExamFullscreenButton(){
+  const b=$('#exam-fullscreen-btn');
+  if(b)b.hidden=!!document.fullscreenElement;
+}
+async function enterExamFullscreen(){
+  try{if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen()}catch{}
+  syncExamFullscreenButton();
+}
 function examFullscreenHandler(){
   if(!examMode)return;
   if(document.fullscreenElement) examFullscreenWasActive=true;
   else if(examFullscreenWasActive) examIntegrityEvent('fullscreen_exit',{at:new Date().toISOString()});
+  syncExamFullscreenButton();
 }
 function examGlobalPasteHandler(e){
   if(!examMode)return;
@@ -174,6 +183,7 @@ function renderExamQuestion(){
     <aside class="exam-sidebar">
       <div class="exam-brand"><span>MODE EXAMEN</span><strong>${esc(s.exam.title)}</strong></div>
       <div id="exam-timer" class="exam-timer">--:--</div>
+      <button id="exam-fullscreen-btn" class="secondary exam-fullscreen-btn" onclick="enterExamFullscreen()" ${document.fullscreenElement?'hidden':''}>⛶ Torna a pantalla completa</button>
       <div class="exam-question-nav">${s.questions.map((x,i)=>{
         const a=examAnswerFor(x),has=String(a.code||'').trim().length>0;
         return `<button class="${i===examQuestionIndex?'active':''} ${has?'has-work':''}" onclick="goExamQuestion(${i})"><b>${i+1}</b><span>${esc(x.title)}</span></button>`;
