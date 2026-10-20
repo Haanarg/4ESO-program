@@ -277,11 +277,15 @@ function openTheory(chapter){
 function openFirstExercise(chapter){const e=exercises.find(x=>x.chapter===chapter);if(e)openExercise(e.id);else dashboard()}
 async function dashboard(){
  if(typeof examCleanup==='function' && typeof examMode!=='undefined' && examMode) examCleanup();
- const d=await api('/api/exercises'); exercises=d.exercises;
  let examItems=[];
  if(!studentPreview && user?.role==='student'){
-   try{examItems=(await api('/api/exams/available')).exams||[]}catch{}
+   try{
+     examItems=(await api('/api/exams/available')).exams||[];
+     const activeAttempt=examItems.find(e=>e.attempt?.status==='in_progress');
+     if(activeAttempt && typeof openExam==='function') return openExam(activeAttempt.id);
+   }catch{}
  }
+ const d=await api('/api/exercises'); exercises=d.exercises;
  const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
  const last={},drafts={};
  try{const x=await api('/api/my-submissions');for(const s of x.submissions)if(!last[s.exercise_id])last[s.exercise_id]=s;if(!studentPreview){const dr=await api('/api/my-drafts');for(const x of dr.drafts||[])drafts[x.exercise_id]=x}}catch{}
