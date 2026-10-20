@@ -83,7 +83,7 @@ function examAlertTotal(a){
 async function teacherExamResults(examId){
   try{
     const d=await api(`/api/teacher/exams/${examId}/results`),e=d.exam,ats=d.attempts||[];
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(e.title)} · Lliuraments</h1><p>${ats.length} intents registrats.</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherEditExam(${e.id})">⚙ Configura</button><button class="secondary" onclick="teacherExams()">← Exàmens</button></div></div>
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(e.title)} · Lliuraments</h1><p>${ats.length} intents registrats.</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${e.id})">↻ Actualitza</button><button class="secondary" onclick="teacherEditExam(${e.id})">⚙ Configura</button><button class="secondary" onclick="teacherExams()">← Exàmens</button></div></div>
       <div class="exam-results-table-wrap"><table class="exam-results-table"><thead><tr><th>Alumne</th><th>Estat</th><th>Inici</th><th>Lliurament</th><th>Alertes</th><th>Nota</th><th></th></tr></thead><tbody>${ats.map(a=>{const alerts=examAlertTotal(a);return `<tr><td><strong>${esc(a.name)}</strong><small>${esc(a.email)}</small></td><td>${a.status==='graded'?'Corregit':a.status==='submitted'?'Lliurat':'En curs'}</td><td>${esc(fmtDateTime(a.started_at))}</td><td>${esc(fmtDateTime(a.submitted_at))}</td><td><span class="${alerts?'integrity-badge alert':'integrity-badge'}">${alerts}</span></td><td>${a.final_score==null?'—':esc(a.final_score)+'/10'}</td><td><button class="secondary" onclick="teacherGradeExamAttempt(${a.id})">${a.status==='in_progress'?'Veure':'Corregir'}</button></td></tr>`}).join('')||'<tr><td colspan="7">Encara no hi ha intents.</td></tr>'}</tbody></table></div>`;
   }catch(e){alert(e.message);teacherExams()}
 }
@@ -101,11 +101,26 @@ async function teacherGradeExamAttempt(id){
   }catch(e){alert(e.message)}
 }
 async function saveExamGrade(attemptId){
-  const scores=[...document.querySelectorAll('.exam-grade-question')].map(card=>({
-    question_id:Number(card.dataset.questionId),
-    score:card.querySelector('.exam-q-score').value,
-    feedback:card.querySelector('.exam-q-feedback').value
-  }));
+  const cards=[...document.querySelectorAll('.exam-grade-question')];
+  const scores=[];
+  for(const card of cards){
+    const input=card.querySelector('.exam-q-score');
+    const raw=String(input?.value??'').trim(),max=Number(input?.max);
+    if(raw===''){
+      alert('Has de posar una nota a tots els exercicis abans de desar la correcció.');
+      input?.focus();return;
+    }
+    const n=Number(raw);
+    if(!Number.isFinite(n)||n<0||(Number.isFinite(max)&&n>max)){
+      alert(`Hi ha una nota no vàlida. Ha d'estar entre 0 i ${Number.isFinite(max)?max:'la puntuació màxima'}.`);
+      input?.focus();return;
+    }
+    scores.push({
+      question_id:Number(card.dataset.questionId),
+      score:n,
+      feedback:card.querySelector('.exam-q-feedback').value
+    });
+  }
   try{
     const d=await api(`/api/teacher/exam-attempts/${attemptId}/grade`,{method:'POST',body:JSON.stringify({scores,teacher_comment:$('#exam-teacher-comment').value})});
     alert(`Correcció desada. Nota final: ${d.final_score}/10`);
