@@ -345,6 +345,79 @@ async function api(req,env){
   ]);
   return json({ok:true});
  }
+ // EXÀMENS — professor: gestió
+ if(path==='/api/teacher/exams' && req.method==='GET' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const rows=await env.DB.prepare(`SELECT e.*,
+    (SELECT COUNT(*) FROM exam_questions q WHERE q.exam_id=e.id) question_count,
+    (SELECT COUNT(*) FROM exam_attempts a WHERE a.exam_id=e.id) attempt_count,
+    (SELECT COUNT(*) FROM exam_attempts a WHERE a.exam_id=e.id AND a.status='submitted') submitted_count,
+    (SELECT COUNT(*) FROM exam_attempts a WHERE a.exam_id=e.id AND a.status='graded') graded_count
+    FROM exams e ORDER BY e.created_at DESC,e.id DESC`).all();
+  return json({exams:(rows.results||[]).map(e=>({...e,effective_state:examState(e)}))});
+ }
+ if(path==='/api/teacher/exams' && req.method==='POST' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const title=String(b.title||'').trim().slice(0,160),description=String(b.description||'').trim().slice(0,6000);
+  if(!title)return json({error:'El títol de l’examen és obligatori.'},400);
+  const duration=Number(b.duration_minutes);
+  const durationMinutes=Number.isFinite(duration)&&duration>0?Math.min(480,Math.round(duration)):null;
+  const row=await env.DB.prepare(`INSERT INTO exams(title,description,status,start_at,end_at,duration_minutes,created_by) VALUES(?,?,?,?,?,?,?) RETURNING *`)
+    .bind(title,description,'draft',b.start_at||null,b.end_at||null,durationMinutes,user.id).first();
+  return json({exam:row},201);
+ }
+ if(/^\/api\/teacher\/exams\/\d+$/.test(path) && req.method==='GET' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const id=Number(path.split('/').pop());
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  const q=await env.DB.prepare('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY position,id').bind(id).all();
+  const ac=await env.DB.prepare('SELECT COUNT(*) total FROM exam_attempts WHERE exam_id=?').bind(id).first();
+  return json({exam:{...exam,effective_state:examState(exam),attempt_count:Number(ac?.total||0)},questions:q.results||[]});
+ }
+ if(/^\/api\/teacher\/exams\/\d+$/.test(path) && req.method==='PUT' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const id=Number(path.split('/').pop());
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const title=String(b.title??exam.title).trim().slice(0,160),description=String(b.description??exam.description).trim().slice(0,6000);
+  if(!title)return json({error:'El títol és obligatori.'},400);
+  const startAt=b.start_at===''?null:(b.start_at??exam.start_at),endAt=b.end_at===''?null:(b.end_at??exam.end_at);
+  if(startAt&&endAt&&Date.parse(endAt)<=Date.parse(startAt))return json({error:'La data de final ha de ser posterior a la d’inici.'},400);
+  const rawDuration=b.duration_minutes===undefined?exam.duration_minutes:b.duration_minutes;
+  const nDuration=Number(rawDuration);
+  const duration=rawDuration==null||rawDuration===''?null:(Number.isFinite(nDuration)&&nDuration>0?Math.min(480,Math.round(nDuration)):null);
+  await env.DB.prepare(`UPDATE exams SET title=?,description=?,start_at=?,end_at=?,duration_minutes=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .bind(title,description,startAt,endAt,duration,id).run();
+  const updated=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
+  return json({exam:{...updated,effective_state:examState(updated)}});
+ }
+ if(/^\/api\/teacher\/exams\/\d+$/.test(path) && req.method==='DELETE' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const id=Number(path.split('/').pop());
+  if(await examHasAttempts(env,id))return json({error:'No es pot eliminar un examen que ja té intents d’alumnes.'},409);
+  await env.DB.prepare('DELETE FROM exam_questions WHERE exam_id=?').bind(id).run();
+  await env.DB.prepare('DELETE FROM exams WHERE id=?').bind(id).run();
+  return json({ok:true});
+ }
+ if(/^\/api\/teacher\/exams\/\d+\/status$/.test(path) && req.method==='POST' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const id=Number(path.split('/')[4]);
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
+  if(!exam)return json({error:'Examen no trobat.'},404);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const status=String(b.status||'');
+  if(!['draft','scheduled','open','closed'].includes(status))return json({error:'Estat no vàlid.'},400);
+  const qc=await env.DB.prepare('SELECT COUNT(*) total FROM exam_questions WHERE exam_id=?').bind(id).first();
+  if((status==='scheduled'||status==='open')&&!Number(qc?.total||0))return json({error:'Afegeix almenys un exercici abans d’obrir o programar l’examen.'},400);
+  if(status==='scheduled'&&!exam.start_at)return json({error:'Per programar l’examen has d’indicar una data i hora d’inici.'},400);
+  if(status==='draft'&&await examHasAttempts(env,id))return json({error:'No es pot tornar a esborrany un examen que ja té intents.'},409);
+  await env.DB.prepare('UPDATE exams SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,id).run();
+  const updated=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(id).first();
+  return json({exam:{...updated,effective_state:examState(updated)}});
+ }
  if(path==='/api/exercises'){const rows=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json FROM exercises ORDER BY chapter,sort_order').all(); return json({exercises:rows.results})}
  if(/^\/api\/exercises\/\d+\/draft$/.test(path) && req.method==='GET'){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
