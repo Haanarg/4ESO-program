@@ -15,6 +15,10 @@ async function api(path,opt={}){
 }
 
 function nav(){
+  if(typeof examMode!=='undefined' && examMode && user){
+    $('#nav').innerHTML=`<span class="exam-nav-lock">🔒 Mode examen · ${esc(user.name)}</span>`;
+    return;
+  }
   $('#nav').innerHTML=user
     ? `Hola, ${esc(user.name)}${user.role==='teacher'?' · Professor':''}${studentPreview?' · Vista d\'alumne':''} · ${studentPreview?'<button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button> · ':''}<button onclick=\"logout()\">Sortir</button>`
     : '';
@@ -272,13 +276,18 @@ function openTheory(chapter){
 }
 function openFirstExercise(chapter){const e=exercises.find(x=>x.chapter===chapter);if(e)openExercise(e.id);else dashboard()}
 async function dashboard(){
+ if(typeof examCleanup==='function' && typeof examMode!=='undefined' && examMode) examCleanup();
  const d=await api('/api/exercises'); exercises=d.exercises;
+ let examItems=[];
+ if(!studentPreview && user?.role==='student'){
+   try{examItems=(await api('/api/exams/available')).exams||[]}catch{}
+ }
  const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Input Loop Adventure Game',12:'Personal Database'};
  const last={},drafts={};
  try{const x=await api('/api/my-submissions');for(const s of x.submissions)if(!last[s.exercise_id])last[s.exercise_id]=s;if(!studentPreview){const dr=await api('/api/my-drafts');for(const x of dr.drafts||[])drafts[x.exercise_id]=x}}catch{}
  const done=e=>last[e.id]?.status==='validated'&&last[e.id]?.final_score!=null;
  const n=exercises.filter(done).length,pct=exercises.length?Math.round(n*100/exercises.length):0;
- $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner\"><strong>👁 Vista d'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>":''}<div class="course-heading"><div><h1>Programació 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes finals.</p></div><strong>${n}/${exercises.length} tasques · ${pct}%</strong></div><div class="course-progress"><span style="width:${pct}%"></span></div><div id="list"></div>`;
+ $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner\"><strong>👁 Vista d'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>":''}${typeof studentExamCards==='function'?studentExamCards(examItems):''}<div class="course-heading"><div><h1>Programació 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes finals.</p></div><strong>${n}/${exercises.length} tasques · ${pct}%</strong></div><div class="course-progress"><span style="width:${pct}%"></span></div><div id="list"></div>`;
  for(const chapter of Object.keys(chapterNames).map(Number)){
   const ce=exercises.filter(x=>x.chapter===chapter);if(!ce.length)continue;const cd=ce.filter(done).length,symbol=cd===ce.length?'✓':cd?'●':'○';
   $('#list').insertAdjacentHTML('beforeend',`<h2 class="chapter-title"><span>${symbol} Capítol ${chapter}: ${esc(chapterNames[chapter])}</span><small>${cd}/${ce.length}</small></h2>`);
@@ -432,7 +441,7 @@ async function teacherDashboard(){
     const d=await api('/api/teacher/submissions');
     const counts={all:d.submissions.length,pending:0,returned:0,validated:0};
     d.submissions.forEach(s=>counts[s.status==='returned'?'returned':s.status==='validated'?'validated':'pending']++);
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues pendents. Quan les validis o retornis, desapareixeran d'aquesta vista.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button></div><div id="teacher-list"></div>`;
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues pendents. Quan les validis o retornis, desapareixeran d'aquesta vista.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherExams()">📝 Exàmens</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button></div><div id="teacher-list"></div>`;
     if(!d.submissions.length){ $('#teacher-list').innerHTML='<div class="card compact-empty"><p>Encara no hi ha entregues.</p></div>'; return; }
     for(const s of d.submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
