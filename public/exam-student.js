@@ -38,7 +38,7 @@ function studentExamCards(items){
 }
 
 async function startExam(id){
-  const ok=confirm('Vols començar l’examen ara?\n\nEn començar, el temps comptarà. La feina es desarà automàticament. Es registraran els enganxats de més d’una línia (ALERTA DE COPY-PASTE), insercions massives, canvis de pestanya o finestra, sortides de pantalla completa, blocs multilínia arrossegats i intents d’accés extern des del codi.');
+  const ok=confirm('Vols començar l’examen ara?\n\nEn començar, el temps comptarà i la feina es desarà automàticament.');
   if(!ok)return;
   try{
     if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
@@ -94,7 +94,6 @@ function examGlobalPasteHandler(e){
   const text=e.clipboardData?.getData('text/plain')||'';
   if(/\r?\n/.test(text)){
     examIntegrityEvent('copy_paste',{lines:text.split(/\r?\n/).length,chars:text.length,area:target?.id||target?.tagName||'unknown'});
-    showExamWarning('⚠ ALERTA DE COPY-PASTE: s’ha registrat un enganxat de més d’una línia.');
   }
 }
 function bindExamIntegrity(){
@@ -113,13 +112,6 @@ async function examIntegrityEvent(type,meta={}){
       event_type:type,question_id:examSession.questions?.[examQuestionIndex]?.id??null,meta
     })});
   }catch{}
-}
-function showExamWarning(text){
-  const box=$('#exam-integrity-warning');
-  if(!box)return;
-  box.textContent=text;box.hidden=false;
-  clearTimeout(showExamWarning._t);
-  showExamWarning._t=setTimeout(()=>{if(box)box.hidden=true},5000);
 }
 function examBlockedNetworkUse(code){
   const patterns=[
@@ -142,8 +134,7 @@ async function runExamCode(){
   const blocked=examBlockedNetworkUse(code);
   if(blocked){
     await examIntegrityEvent('network_attempt',{blocked});
-    showExamWarning('⚠ Intent d’accés extern bloquejat en mode examen.');
-    const out=$('#output');if(out)out.textContent='Mode examen: no es permet accedir a Internet, al navegador ni instal·lar paquets externs.';
+    const out=$('#output');if(out)out.textContent='Aquest mòdul o recurs no està disponible en aquest entorn d’execució.';
     return;
   }
   return runCode();
@@ -189,10 +180,9 @@ function renderExamQuestion(){
         return `<button class="${i===examQuestionIndex?'active':''} ${has?'has-work':''}" onclick="goExamQuestion(${i})"><b>${i+1}</b><span>${esc(x.title)}</span></button>`;
       }).join('')}</div>
       <button class="secondary exam-review-btn" onclick="examReview()">Revisa i lliura</button>
-      <small class="exam-security-note">Desament automàtic actiu · controls d’integritat actius</small>
+      <small class="exam-security-note">Desament automàtic actiu</small>
     </aside>
     <main class="exam-workspace">
-      <div id="exam-integrity-warning" class="exam-integrity-warning" hidden></div>
       <div class="exam-question-head"><div><span class="pill">Exercici ${examQuestionIndex+1}/${total}</span><h1>${esc(q.title)}</h1></div><strong>${esc(q.max_score)} punts</strong></div>
       <div id="exam-statement" class="exam-statement">${esc(q.statement)}</div>
       <div class="editor-heading"><h2>Editor Python</h2><span id="exam-save-status" class="draft-status saved">✓ Desat</span></div>
@@ -217,10 +207,8 @@ function renderExamQuestion(){
     const chars=Array.isArray(change.text)?change.text.join('\n').length:0;
     if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1){
       examIntegrityEvent('copy_paste',{lines:change.text.length,chars,area:'editor'});
-      showExamWarning('⚠ ALERTA DE COPY-PASTE: s’ha registrat un enganxat de més d’una línia.');
     }else if(!['setValue','paste','undo','redo'].includes(change.origin) && chars>=120){
       examIntegrityEvent('large_insert',{chars,origin:change.origin||'unknown'});
-      showExamWarning('⚠ S’ha registrat una inserció massiva de text al codi.');
     }
   });
   const wrap=codeEditor.getWrapperElement();
@@ -228,7 +216,6 @@ function renderExamQuestion(){
     const t=e.dataTransfer?.getData('text/plain')||'';
     if(/\r?\n/.test(t)){
       examIntegrityEvent('drop_multiline',{lines:t.split(/\r?\n/).length,chars:t.length});
-      showExamWarning('⚠ S’ha registrat l’arrossegament d’dun bloc multilinia.');
     }
   });
   $('#stdin').addEventListener('input',scheduleExamSave);
