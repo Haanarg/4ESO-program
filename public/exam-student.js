@@ -1,4 +1,4 @@
-let examMode=false, examSession=null, examQuestionIndex=0, examSaveTimer=null, examTimerInterval=null, examIntegrityBound=false, examFullscreenWasActive=false, examSaving=false, examDirty=false, examAutoSubmitting=false, examServerOffsetMs=0;
+let examMode=false, examSession=null, examQuestionIndex=0, examSaveTimer=null, examTimerInterval=null, examStatusInterval=null, examIntegrityBound=false, examFullscreenWasActive=false, examSaving=false, examDirty=false, examAutoSubmitting=false, examServerOffsetMs=0;
 
 function examStateLabel(state){
   return ({draft:'Esborrany',upcoming:'Programat',active:'Obert',closed:'Tancat'})[state]||state||'—';
@@ -54,6 +54,7 @@ function examCleanup(){
   examMode=false;
   if(examSaveTimer){clearTimeout(examSaveTimer);examSaveTimer=null}
   if(examTimerInterval){clearInterval(examTimerInterval);examTimerInterval=null}
+  if(examStatusInterval){clearInterval(examStatusInterval);examStatusInterval=null}
   document.removeEventListener('visibilitychange',examVisibilityHandler);
   document.removeEventListener('fullscreenchange',examFullscreenHandler);
   document.removeEventListener('paste',examGlobalPasteHandler,true);
@@ -151,7 +152,9 @@ async function openExam(id){
     examMode=true;nav();bindExamIntegrity();
     renderExamQuestion();
     if(examTimerInterval)clearInterval(examTimerInterval);
+    if(examStatusInterval)clearInterval(examStatusInterval);
     examTimerInterval=setInterval(updateExamTimer,1000);
+    examStatusInterval=setInterval(examHeartbeat,30000);
     updateExamTimer();
   }catch(e){
     examCleanup();
@@ -250,6 +253,21 @@ async function goExamQuestion(index){
   if(index<0||index>=examSession.questions.length||index===examQuestionIndex)return;
   const ok=await examSaveCurrent(true);if(!ok)return;
   examQuestionIndex=index;renderExamQuestion();
+}
+async function examHeartbeat(){
+  if(!examMode||!examSession?.attempt?.id)return;
+  try{
+    const st=await api(`/api/exam-attempts/${examSession.attempt.id}/status`);
+    examServerOffsetMs=st.server_now?Date.parse(st.server_now)-Date.now():examServerOffsetMs;
+    if(st.deadline) examSession.deadline=st.deadline;
+    if(st.status!=='in_progress'){
+      const examId=examSession.exam.id;
+      examCleanup();
+      const fresh=await api(`/api/exams/${examId}/attempt`);
+      alert('L’examen s’ha tancat i la feina desada ha quedat lliurada.');
+      renderSubmittedExam(fresh);
+    }
+  }catch{}
 }
 function updateExamTimer(){
   if(!examMode||!examSession)return;
