@@ -699,6 +699,20 @@ async function api(req,env){
    answers:ans.results||[]
   });
  }
+ if(/^\/api\/exam-attempts\/\d+\/status$/.test(path) && req.method==='GET' && user?.role==='student'){
+  await ensureExamTables(env);
+  const attemptId=Number(path.split('/')[3]);
+  let attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=? AND user_id=?').bind(attemptId,user.id).first();
+  if(!attempt)return json({error:'Intent no trobat.'},404);
+  const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(attempt.exam_id).first();
+  attempt=await autoSubmitExpiredExam(env,exam,attempt);
+  return json({
+   status:attempt.status,
+   submitted_at:attempt.submitted_at||null,
+   deadline:examAttemptDeadline(exam,attempt),
+   server_now:new Date().toISOString()
+  });
+ }
  if(/^\/api\/exam-attempts\/\d+\/answers\/\d+$/.test(path) && req.method==='PUT' && user?.role==='student'){
   await ensureExamTables(env);
   const parts=path.split('/'),attemptId=Number(parts[3]),questionId=Number(parts[5]);
