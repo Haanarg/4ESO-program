@@ -1080,7 +1080,7 @@ async function api(req,env){
     (SELECT COALESCE(SUM(
       COALESCE(
        CAST(json_extract(ev.meta_json,'$.duration_ms') AS INTEGER),
-       MAX(0,CAST((julianday(CURRENT_TIMESTAMP)-julianday(ev.created_at))*86400000 AS INTEGER))
+       MAX(0,CAST((julianday(COALESCE(a.submitted_at,CURRENT_TIMESTAMP))-julianday(ev.created_at))*86400000 AS INTEGER))
       )
      ),0) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_out_ms,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline') drop_multiline_count,
