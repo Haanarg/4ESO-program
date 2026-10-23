@@ -14,6 +14,88 @@ async function api(path,opt={}){
   return d;
 }
 
+const STUDENT_TRANSLATOR_LANGS=[
+ ['ca','Català'],['es','Castellà'],['en','Anglès'],['fr','Francès'],['de','Alemany'],['it','Italià'],['pt','Portuguès'],
+ ['ar','Àrab'],['ro','Romanès'],['uk','Ucraïnès'],['ru','Rus'],['zh','Xinès'],['ur','Urdú'],['hi','Hindi'],['bn','Bengalí'],['pa','Panjabi']
+];
+let studentTranslatorLastOutput='';
+
+function studentTranslatorLanguageOptions(selected){
+ return STUDENT_TRANSLATOR_LANGS.map(([code,name])=>`<option value="${code}" ${code===selected?'selected':''}>${esc(name)}</option>`).join('');
+}
+function studentTranslatorHtml(){
+ return `<details class="student-translator" data-integrity-exempt="true">
+  <summary>🌐 Traductor <span>opcional</span></summary>
+  <div class="student-translator-body">
+   <div class="student-translator-langs">
+    <label>Idioma d’entrada<select id="translator-source">${studentTranslatorLanguageOptions('ca')}</select></label>
+    <button class="secondary translator-swap" type="button" onclick="swapStudentTranslator()" title="Intercanvia idiomes">⇄</button>
+    <label>Idioma de sortida<select id="translator-target">${studentTranslatorLanguageOptions('es')}</select></label>
+   </div>
+   <div class="student-translator-actions">
+    <button class="secondary" type="button" onclick="loadStatementIntoTranslator()">Carrega l’enunciat</button>
+    <button type="button" onclick="translateStudentText()">Tradueix</button>
+   </div>
+   <label>Text d’entrada<textarea id="translator-input" rows="4" spellcheck="true"></textarea></label>
+   <label>Traducció<textarea id="translator-output" rows="4" readonly></textarea></label>
+   <div class="student-translator-footer"><span id="translator-status"></span><button class="secondary mini-btn" type="button" onclick="copyStudentTranslation()">⧉ Copia traducció</button></div>
+  </div>
+ </details>`;
+}
+function currentStatementForTranslator(){
+ if(typeof examMode!=='undefined' && examMode && examSession?.questions?.length){
+  return String(examSession.questions[examQuestionIndex]?.statement||'');
+ }
+ return String(current?.statement||'');
+}
+function loadStatementIntoTranslator(){
+ const input=$('#translator-input'),status=$('#translator-status');
+ if(!input)return;
+ input.value=currentStatementForTranslator();
+ if(status){status.textContent='Enunciat carregat';status.className='muted'}
+}
+function normalizeTranslatorText(v){return String(v||'').replace(/\r\n?/g,'\n').replace(/\n$/,'')}
+function isStudentTranslatorPaste(lines){
+ const pasted=normalizeTranslatorText(Array.isArray(lines)?lines.join('\n'):lines);
+ return !!studentTranslatorLastOutput && pasted===normalizeTranslatorText(studentTranslatorLastOutput);
+}
+async function translateStudentText(){
+ const input=$('#translator-input'),output=$('#translator-output'),status=$('#translator-status');
+ if(!input||!output||!status)return;
+ const text=input.value,source=$('#translator-source')?.value,target=$('#translator-target')?.value;
+ if(!text.trim()){status.textContent='Escriu o carrega un text.';status.className='error';return}
+ status.textContent='Traduint…';status.className='muted';
+ try{
+  const d=await api('/api/translate',{method:'POST',body:JSON.stringify({text,source_lang:source,target_lang:target})});
+  studentTranslatorLastOutput=String(d.translated_text||'');
+  output.value=studentTranslatorLastOutput;
+  status.textContent='✓ Traducció preparada';status.className='reset-success';
+ }catch(e){status.textContent=e.message;status.className='error'}
+}
+function swapStudentTranslator(){
+ const source=$('#translator-source'),target=$('#translator-target'),input=$('#translator-input'),output=$('#translator-output');
+ if(!source||!target)return;
+ const lang=source.value;source.value=target.value;target.value=lang;
+ if(input&&output&&output.value){
+  const txt=input.value;input.value=output.value;output.value=txt;
+  studentTranslatorLastOutput=output.value;
+ }
+}
+async function copyStudentTranslation(){
+ const output=$('#translator-output'),status=$('#translator-status');
+ if(!output?.value)return;
+ try{
+  await navigator.clipboard.writeText(output.value);
+  studentTranslatorLastOutput=output.value;
+  if(status){status.textContent='✓ Traducció copiada';status.className='reset-success'}
+ }catch{
+  output.focus();output.select();
+  document.execCommand?.('copy');
+  studentTranslatorLastOutput=output.value;
+  if(status){status.textContent='✓ Traducció copiada';status.className='reset-success'}
+ }
+}
+
 function nav(){
   if(typeof examMode!=='undefined' && examMode && user){
     $('#nav').innerHTML=`<span class="exam-nav-lock">🔒 Mode examen · ${esc(user.name)}</span>`;
@@ -329,14 +411,14 @@ async function openExercise(id){
  const legacySolved94=current.code==='9.4' && savedDraft?.code?.length===1068 && savedDraft.code.startsWith('#Define four functions - add, subtract, multiply, divide') && savedDraft.code.endsWith('print(outputNum)');
  const editorCode=isReturned ? latestSubmission.code : (legacySolved94?current.starter_code:(savedDraft?.code??current.starter_code));
  const returnedFeedback=isReturned?`<div class="returned-feedback"><div><span class="status returned">↩ Retornada</span><h3>Comentaris del professor</h3></div><p>${latestSubmission.teacher_comment?esc(latestSubmission.teacher_comment):'El professor ha retornat aquesta tasca perquè la puguis revisar i tornar a enviar.'}</p>${latestSubmission.returned_score!=null?`<small>Nota de l'intent retornat: ${esc(latestSubmission.returned_score)}/10</small>`:''}</div>`:'';
- $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p id="exercise-statement" class="statement">${esc(current.statement)}</p><h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div><textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Escriu aquí les respostes <strong>abans de prémer Executar</strong>, una per línia i en el mateix ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false" placeholder="Exemple:&#10;Gaspar&#10;15"></textarea></div><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div><div class="output-heading"><h3>Sortida</h3><small>La pots redimensionar verticalment</small></div><div id="output" class="output resizable-output"></div><div id="grade"></div></section></div>`;
+ $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p id="exercise-statement" class="statement">${esc(current.statement)}</p>${studentTranslatorHtml()}<h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div><textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Escriu aquí les respostes <strong>abans de prémer Executar</strong>, una per línia i en el mateix ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false" placeholder="Exemple:&#10;Gaspar&#10;15"></textarea></div><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div><div class="output-heading"><h3>Sortida</h3><small>La pots redimensionar verticalment</small></div><div id="output" class="output resizable-output"></div><div id="grade"></div></section></div>`;
  codeEditor=CodeMirror.fromTextArea($('#code'),{mode:{name:'python',version:3,singleLineStringErrors:false},lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,lineWrapping:false,viewportMargin:Infinity,autofocus:true,extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}});
  codeEditor.setSize('100%','clamp(540px,70vh,860px)');
  if(!studentPreview){
   codeEditor.on('change',()=>{const st=$('#draft-status');if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}if(draftTimer)clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft(false),1800)});
   if(!submissionLocked){
    codeEditor.on('beforeChange',(cm,change)=>{
-    if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1){
+    if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1 && !isStudentTranslatorPaste(change.text)){
      exerciseIntegrityEvent('copy_paste',{lines:change.text.length,chars:change.text.join('\n').length,area:'editor'});
     }
    });
