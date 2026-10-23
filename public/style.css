@@ -641,3 +641,26 @@ main{max-width:1720px}
   font-size:1.05rem;
   white-space:nowrap;
 }
+
+.security-chip-row{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.security-chip{
+  display:inline-grid;
+  place-items:center;
+  min-width:24px;
+  min-height:24px;
+  padding:3px 6px;
+  border-radius:999px;
+  border:1px solid currentColor;
+  background:rgba(148,163,184,.08);
+  color:#cbd5e1;
+  font-size:11px;
+  font-weight:900;
+  line-height:1;
+}
+.security-chip.security-copy_paste{color:#fb7185;background:rgba(251,113,133,.09)}
+.security-chip.security-statement_copy{color:#fbbf24;background:rgba(251,191,36,.09)}
+.security-chip.security-tab_hidden{color:#38bdf8;background:rgba(56,189,248,.09)}
+.security-chip.security-fullscreen_exit{color:#a78bfa;background:rgba(167,139,250,.10)}
+.security-chip.security-drop_multiline{color:#f472b6;background:rgba(244,114,182,.09)}
+.security-chip.security-network_attempt{color:#fb923c;background:rgba(251,146,60,.10)}
+.security-chip.security-large_insert{color:#a3e635;background:rgba(163,230,53,.08)}
