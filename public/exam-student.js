@@ -108,7 +108,7 @@ function examFullscreenHandler(){
 function examGlobalPasteHandler(e){
   if(!examMode)return;
   const target=e.target;
-  if(target?.closest?.('.CodeMirror')) return;
+  if(target?.closest?.('.CodeMirror') || target?.closest?.('.student-translator')) return;
   const text=e.clipboardData?.getData('text/plain')||'';
   if(/\r?\n/.test(text)){
     examIntegrityEvent('copy_paste',{lines:text.split(/\r?\n/).length,chars:text.length,area:target?.id||target?.tagName||'unknown'});
@@ -203,6 +203,7 @@ function renderExamQuestion(){
     <main class="exam-workspace">
       <div class="exam-question-head"><div><span class="pill">Exercici ${examQuestionIndex+1}/${total}</span><h1>${esc(q.title)}</h1></div><strong>${esc(q.max_score)} punts</strong></div>
       <div id="exam-statement" class="exam-statement">${esc(q.statement)}</div>
+      ${studentTranslatorHtml()}
       <div class="editor-heading"><h2>Editor Python</h2><span id="exam-save-status" class="draft-status saved">✓ Desat</span></div>
       <textarea id="code" spellcheck="false">${esc(ans.code??q.starter_code??'')}</textarea>
       <div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Una resposta per línia, en l’ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false"></textarea></div>
@@ -223,7 +224,7 @@ function renderExamQuestion(){
   codeEditor.on('change',()=>scheduleExamSave());
   codeEditor.on('beforeChange',(cm,change)=>{
     const chars=Array.isArray(change.text)?change.text.join('\n').length:0;
-    if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1){
+    if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1 && !isStudentTranslatorPaste(change.text)){
       examIntegrityEvent('copy_paste',{lines:change.text.length,chars,area:'editor'});
     }else if(!['setValue','paste','undo','redo'].includes(change.origin) && chars>=120){
       examIntegrityEvent('large_insert',{chars,origin:change.origin||'unknown'});
