@@ -181,11 +181,39 @@ async function deleteExamQuestion(examId,qid){
 function examAlertTotal(a){
   return Number(a.copy_paste_count||0)+Number(a.tab_hidden_count||0)+Number(a.fullscreen_exit_count||0)+Number(a.drop_multiline_count||0)+Number(a.network_attempt_count||0)+Number(a.large_insert_count||0)+Number(a.statement_copy_count||0);
 }
+function securityAlertClass(type){
+  return 'security-alert security-'+String(type||'other').replace(/[^a-z0-9_-]/gi,'');
+}
+function formatSecurityDuration(ms){
+  const sec=Math.max(0,Math.round(Number(ms||0)/1000));
+  if(sec<60)return sec+' s';
+  const m=Math.floor(sec/60),s=sec%60;
+  if(m<60)return `${m} min ${String(s).padStart(2,'0')} s`;
+  const h=Math.floor(m/60),mm=m%60;
+  return `${h} h ${String(mm).padStart(2,'0')} min`;
+}
+function fullscreenEventDuration(ev,meta,attempt){
+  const direct=Number(meta?.duration_ms);
+  if(Number.isFinite(direct)&&direct>=0)return direct;
+  const start=Date.parse(ev?.created_at||'');
+  if(!Number.isFinite(start))return 0;
+  const end=attempt?.submitted_at?Date.parse(attempt.submitted_at):Date.now();
+  return Number.isFinite(end)?Math.max(0,end-start):0;
+}
+function integrityEventDetail(ev,meta,attempt){
+  if(ev.event_type==='fullscreen_exit')return 'Temps fora de pantalla completa: '+formatSecurityDuration(fullscreenEventDuration(ev,meta,attempt));
+  if(ev.event_type==='copy_paste')return `Bloc enganxat: ${meta.lines||'?'} línies${meta.chars?' · '+meta.chars+' caràcters':''}`;
+  if(ev.event_type==='statement_copy')return `Text copiat de l’enunciat${meta.near_full_statement?' · gairebé complet':''}${meta.chars?' · '+meta.chars+' caràcters':''}`;
+  if(ev.event_type==='drop_multiline')return `Bloc arrossegat: ${meta.lines||'?'} línies${meta.chars?' · '+meta.chars+' caràcters':''}`;
+  if(ev.event_type==='large_insert')return `Inserció de ${meta.chars||'?'} caràcters`;
+  if(ev.event_type==='network_attempt')return meta.blocked?`Recurs bloquejat: ${meta.blocked}`:'Intent d’accés extern';
+  return '';
+}
 async function teacherExamResults(examId){
   try{
     const d=await api(`/api/teacher/exams/${examId}/results`),e=d.exam,ats=d.attempts||[];
     $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(e.title)} · Lliuraments</h1><p>${ats.length} intents registrats.</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${e.id})">↻ Actualitza</button><button class="secondary" onclick="teacherEditExam(${e.id})">⚙ Configura</button><button class="secondary" onclick="teacherExams()">← Exàmens</button></div></div>
-      <div class="exam-results-table-wrap"><table class="exam-results-table"><thead><tr><th>Alumne</th><th>Estat</th><th>Inici</th><th>Lliurament</th><th>Alertes</th><th>Nota</th><th></th></tr></thead><tbody>${ats.map(a=>{const alerts=examAlertTotal(a);return `<tr><td><strong>${esc(a.name)}</strong><small>${esc(a.email)}</small></td><td>${a.status==='graded'?'Corregit':a.status==='submitted'?'Lliurat':'En curs'}</td><td>${esc(fmtDateTime(a.started_at))}</td><td>${esc(fmtDateTime(a.submitted_at))}</td><td><span class="${alerts?'integrity-badge alert':'integrity-badge'}">${alerts}</span></td><td>${a.final_score==null?'—':esc(a.final_score)+'/10'}</td><td><button class="secondary" onclick="teacherGradeExamAttempt(${a.id})">${a.status==='in_progress'?'Veure':'Corregir'}</button></td></tr>`}).join('')||'<tr><td colspan="7">Encara no hi ha intents.</td></tr>'}</tbody></table></div>`;
+      <div class="exam-results-table-wrap"><table class="exam-results-table"><thead><tr><th>Alumne</th><th>Estat</th><th>Inici</th><th>Lliurament</th><th>Alertes</th><th>Nota</th><th></th></tr></thead><tbody>${ats.map(a=>{const alerts=examAlertTotal(a);return `<tr><td><strong>${esc(a.name)}</strong><small>${esc(a.email)}</small></td><td>${a.status==='graded'?'Corregit':a.status==='submitted'?'Lliurat':'En curs'}</td><td>${esc(fmtDateTime(a.started_at))}</td><td>${esc(fmtDateTime(a.submitted_at))}</td><td><span class="${alerts?'integrity-badge alert':'integrity-badge'}">${alerts}</span>${Number(a.fullscreen_out_ms||0)>0?`<small class="fullscreen-time">⛶ ${esc(formatSecurityDuration(a.fullscreen_out_ms))}</small>`:''}</td><td>${a.final_score==null?'—':esc(a.final_score)+'/10'}</td><td><button class="secondary" onclick="teacherGradeExamAttempt(${a.id})">${a.status==='in_progress'?'Veure':'Corregir'}</button></td></tr>`}).join('')||'<tr><td colspan="7">Encara no hi ha intents.</td></tr>'}</tbody></table></div>`;
   }catch(e){alert(e.message);teacherExams()}
 }
 function integrityEventLabel(type){
@@ -196,7 +224,7 @@ async function teacherGradeExamAttempt(id){
     const d=await api(`/api/teacher/exam-attempts/${id}`),a=d.attempt,answers=new Map((d.answers||[]).map(x=>[Number(x.question_id),x])),editable=a.status!=='in_progress';
     const events=d.events||[];
     $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(a.name)} · ${esc(a.exam_title)}</h1><p>${a.status==='graded'?'Examen corregit':a.status==='submitted'?'Examen lliurat':'Examen encara en curs'}</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${a.exam_id})">← Lliuraments</button></div></div>
-      ${events.length?`<section class="card integrity-panel"><h2>⚠ Registre d’integritat · ${events.length} alertes</h2><p>Aquest registre és un indicador per revisar; no prova per si sol l’ús d’IA.</p><div class="integrity-events">${events.map(ev=>{let meta={};try{meta=JSON.parse(ev.meta_json||'{}')}catch{}return `<div><strong>${esc(integrityEventLabel(ev.event_type))}</strong><span>${esc(fmtDateTime(ev.created_at))}${ev.question_id?' · exercici '+esc(ev.question_id):''}</span>${Object.keys(meta).length?`<small>${esc(JSON.stringify(meta))}</small>`:''}</div>`}).join('')}</div></section>`:'<div class="card integrity-clean">✓ No s’han registrat alertes d’integritat.</div>'}
+      ${events.length?`<section class="card integrity-panel"><h2>⚠ Registre d’integritat · ${events.length} alertes</h2><p>Aquest registre és un indicador per revisar; no prova per si sol l’ús d’IA.</p>${(()=>{const total=events.filter(x=>x.event_type==='fullscreen_exit').reduce((n,ev)=>{let m={};try{m=JSON.parse(ev.meta_json||'{}')}catch{}return n+fullscreenEventDuration(ev,m,a)},0);return total>0?`<div class="fullscreen-total"><strong>⛶ Temps total fora de pantalla completa</strong><span>${esc(formatSecurityDuration(total))}</span></div>`:''})()}<div class="integrity-events">${events.map(ev=>{let meta={};try{meta=JSON.parse(ev.meta_json||'{}')}catch{}const detail=integrityEventDetail(ev,meta,a);return `<div class="${securityAlertClass(ev.event_type)}"><strong>${esc(integrityEventLabel(ev.event_type))}</strong><span>${esc(fmtDateTime(ev.created_at))}${ev.question_id?' · exercici '+esc(ev.question_id):''}</span>${detail?`<small>${esc(detail)}</small>`:''}</div>`}).join('')}</div></section>`:'<div class="card integrity-clean">✓ No s’han registrat alertes d’integritat.</div>'}
       <div class="exam-grade-list">${d.questions.map((q,i)=>{const ans=answers.get(Number(q.id))||{};return `<article class="card exam-grade-question" data-question-id="${q.id}"><div class="exam-question-head"><div><span class="pill">Exercici ${i+1}</span><h2>${esc(q.title)}</h2></div><strong>${esc(q.max_score)} punts</strong></div><p>${esc(q.statement)}</p><div class="exam-code-review-head"><h4>Codi lliurat</h4><button class="secondary mini-btn" onclick="runTeacherExamAnswer(this)">▶ Executa</button></div><pre class="exam-submitted-code">${esc(ans.code||'')}</pre><div class="output teacher-exam-output" hidden></div>${ans.stdin?`<details><summary>Entrades de prova</summary><pre class="exam-submitted-stdin">${esc(ans.stdin)}</pre></details>`:''}<div class="exam-grade-controls"><label>Nota / ${esc(q.max_score)}<input class="exam-q-score" type="number" min="0" max="${esc(q.max_score)}" step="0.1" value="${esc(ans.score??'')}" ${editable?'':'disabled'}></label><label>Comentari<textarea class="exam-q-feedback" rows="3" ${editable?'':'disabled'}>${esc(ans.feedback||'')}</textarea></label></div></article>`}).join('')}</div>
       <section class="card exam-final-correction"><label>Comentari general<textarea id="exam-teacher-comment" rows="4" ${editable?'':'disabled'}>${esc(a.teacher_comment||'')}</textarea></label><div class="modal-actions">${editable?`<button onclick="saveExamGrade(${a.id})">✓ Desa la correcció</button>`:'<button disabled>Encara en curs</button>'}</div></section>`;
   }catch(e){alert(e.message)}
