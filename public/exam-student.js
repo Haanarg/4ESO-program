@@ -1,4 +1,4 @@
-let examMode=false, examSession=null, examQuestionIndex=0, examSaveTimer=null, examTimerInterval=null, examStatusInterval=null, examIntegrityBound=false, examFullscreenWasActive=false, examSaving=false, examDirty=false, examAutoSubmitting=false, examServerOffsetMs=0;
+let examMode=false, examSession=null, examQuestionIndex=0, examSaveTimer=null, examTimerInterval=null, examStatusInterval=null, examIntegrityBound=false, examFullscreenWasActive=false, examFullscreenExitStartedMs=null, examFullscreenExitEventPromise=null, examSaving=false, examDirty=false, examAutoSubmitting=false, examServerOffsetMs=0;
 
 function examStateLabel(state){
   return ({draft:'Esborrany',upcoming:'Programat',active:'Obert',closed:'Tancat'})[state]||state||'—';
@@ -78,6 +78,8 @@ function examCleanup(){
   document.removeEventListener('paste',examGlobalPasteHandler,true);
   window.removeEventListener('beforeunload',examBeforeUnload);
   examIntegrityBound=false;
+  examFullscreenExitStartedMs=null;
+  examFullscreenExitEventPromise=null;
   examSaving=false;examDirty=false;examAutoSubmitting=false;
   nav();
 }
@@ -99,10 +101,32 @@ async function enterExamFullscreen(){
   try{if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen()}catch{}
   syncExamFullscreenButton();
 }
-function examFullscreenHandler(){
+async function examFullscreenHandler(){
   if(!examMode)return;
-  if(document.fullscreenElement) examFullscreenWasActive=true;
-  else if(examFullscreenWasActive) examIntegrityEvent('fullscreen_exit',{at:new Date().toISOString()});
+  if(document.fullscreenElement){
+    examFullscreenWasActive=true;
+    if(examFullscreenExitStartedMs!=null){
+      const started=examFullscreenExitStartedMs;
+      const eventPromise=examFullscreenExitEventPromise;
+      examFullscreenExitStartedMs=null;
+      examFullscreenExitEventPromise=null;
+      const returnedAt=new Date().toISOString();
+      const durationMs=Math.max(0,Date.now()-started);
+      try{
+        const created=await eventPromise;
+        if(created?.event_id && examSession?.attempt?.id){
+          await api(`/api/exam-attempts/${examSession.attempt.id}/events/${created.event_id}`,{
+            method:'PATCH',
+            body:JSON.stringify({duration_ms:durationMs,returned_at:returnedAt})
+          });
+        }
+      }catch{}
+    }
+  }else if(examFullscreenWasActive && examFullscreenExitStartedMs==null){
+    examFullscreenExitStartedMs=Date.now();
+    const leftAt=new Date(examFullscreenExitStartedMs).toISOString();
+    examFullscreenExitEventPromise=examIntegrityEvent('fullscreen_exit',{left_at:leftAt});
+  }
   syncExamFullscreenButton();
 }
 function examGlobalPasteHandler(e){
@@ -118,18 +142,20 @@ function bindExamIntegrity(){
   if(examIntegrityBound)return;
   examIntegrityBound=true;
   examFullscreenWasActive=!!document.fullscreenElement;
+  examFullscreenExitStartedMs=null;
+  examFullscreenExitEventPromise=null;
   document.addEventListener('visibilitychange',examVisibilityHandler);
   document.addEventListener('fullscreenchange',examFullscreenHandler);
   document.addEventListener('paste',examGlobalPasteHandler,true);
   window.addEventListener('beforeunload',examBeforeUnload);
 }
 async function examIntegrityEvent(type,meta={}){
-  if(!examMode||!examSession?.attempt?.id)return;
+  if(!examMode||!examSession?.attempt?.id)return null;
   try{
-    await api(`/api/exam-attempts/${examSession.attempt.id}/events`,{method:'POST',body:JSON.stringify({
+    return await api(`/api/exam-attempts/${examSession.attempt.id}/events`,{method:'POST',body:JSON.stringify({
       event_type:type,question_id:examSession.questions?.[examQuestionIndex]?.id??null,meta
     })});
-  }catch{}
+  }catch{return null}
 }
 function examBlockedNetworkUse(code){
   const patterns=[
