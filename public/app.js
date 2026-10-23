@@ -588,6 +588,14 @@ function exerciseIntegrityTime(ev){
 function exerciseIntegrityClass(ev){
   return 'security-alert security-'+String(ev?.event_type||'other').replace(/[^a-z0-9_-]/gi,'');
 }
+function exerciseIntegrityChips(events){
+  const counts=new Map();
+  for(const ev of events||[])counts.set(ev.event_type,(counts.get(ev.event_type)||0)+1);
+  return [...counts.entries()].map(([type,n])=>{
+    const label=type==='copy_paste'?'ALERTA DE COPY-PASTE':type==='statement_copy'?'Còpia directa de l’enunciat':type;
+    return `<span class="security-chip security-${String(type).replace(/[^a-z0-9_-]/gi,'')}" title="${esc(label)} · ${n}">⚠${n>1?' '+n:''}</span>`;
+  }).join('');
+}
 
 async function teacherDashboard(){
   try{
@@ -605,7 +613,7 @@ async function teacherDashboard(){
       const integrity=Array.isArray(s.integrity_events)?s.integrity_events:[];
       $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission compact-submission ${returned?'returned-submission':''}" data-status="${status}">
         <div class="compact-submission-main">
-          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span>${integrity.length?`<span class="normal-integrity-badge" title="${integrity.length} alerta${integrity.length===1?'':'es'} d’integritat">⚠${integrity.length>1?` ${integrity.length}`:''}</span>`:''}</div>
+          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span>${integrity.length?`<span class="security-chip-row">${exerciseIntegrityChips(integrity)}</span>`:''}</div>
           <div class="compact-student"><strong>${esc(s.name)}</strong><span>${esc(s.title)}</span></div>
           <small class="compact-date">${esc(s.submitted_at)}</small>
           <button class="statement-btn secondary" onclick="event.stopPropagation();toggleTeacherStatement(${s.id})">📋 Enunciat</button>
