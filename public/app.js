@@ -585,6 +585,9 @@ function exerciseIntegrityTime(ev){
   const d=new Date(ev.created_at);
   return Number.isNaN(d.getTime())?'':d.toLocaleString('ca-ES',{dateStyle:'short',timeStyle:'short'});
 }
+function exerciseIntegrityClass(ev){
+  return 'security-alert security-'+String(ev?.event_type||'other').replace(/[^a-z0-9_-]/gi,'');
+}
 
 async function teacherDashboard(){
   try{
@@ -615,7 +618,7 @@ async function teacherDashboard(){
         </div>
         <details class="compact-review">
           <summary>Corregir</summary>
-          ${integrity.length?`<div class="normal-integrity-panel"><div class="normal-integrity-title"><strong>⚠ Alertes d’integritat</strong><span>${integrity.length}</span></div><ul>${integrity.map(ev=>`<li><strong>${esc(exerciseIntegrityReason(ev))}</strong>${exerciseIntegrityTime(ev)?`<small>${esc(exerciseIntegrityTime(ev))}</small>`:''}</li>`).join('')}</ul></div>`:''}
+          ${integrity.length?`<div class="normal-integrity-panel"><div class="normal-integrity-title"><strong>⚠ Alertes d’integritat</strong><span>${integrity.length}</span></div><ul>${integrity.map(ev=>`<li class="${exerciseIntegrityClass(ev)}"><strong>${esc(exerciseIntegrityReason(ev))}</strong>${exerciseIntegrityTime(ev)?`<small>${esc(exerciseIntegrityTime(ev))}</small>`:''}</li>`).join('')}</ul></div>`:''}
           <div class="compact-review-grid">
             <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
             <div class="compact-ai"><h4>Correcció IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</div>
