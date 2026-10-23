@@ -759,6 +759,32 @@ async function api(req,env){
 }
  if(path==='/api/login' && req.method==='POST'){const b=await req.json(); const r=await env.DB.prepare('SELECT id,name,email,password_hash,role FROM users WHERE email=?').bind((b.email||'').toLowerCase().trim()).first(); if(!r||!(await passwordOk(b.password||'',r.password_hash)))return json({error:'Credencials incorrectes.'},401); delete r.password_hash; return session(r,env)}
  if(path==='/api/me') return json({user});
+ if(path==='/api/translate' && req.method==='POST'){
+  if(!user)return json({error:'Cal iniciar sessió.'},401);
+  if(!env.AI)return json({error:'El traductor no està disponible ara mateix.'},503);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const text=String(b.text||'').trim();
+  const source=String(b.source_lang||'').trim().toLowerCase();
+  const target=String(b.target_lang||'').trim().toLowerCase();
+  const allowed=new Set(['ca','es','en','fr','de','it','pt','ar','ro','uk','ru','zh','ur','hi','bn','pa']);
+  if(!text)return json({error:'Escriu o carrega un text per traduir.'},400);
+  if(text.length>3500)return json({error:'El text és massa llarg per al traductor.'},400);
+  if(!allowed.has(source)||!allowed.has(target))return json({error:'Idioma no admès.'},400);
+  if(source===target)return json({translated_text:text});
+  try{
+   const out=await env.AI.run('@cf/meta/m2m100-1.2b',{
+    text,
+    source_lang:source,
+    target_lang:target
+   });
+   const translated=String(out?.translated_text||out?.translation||'').trim();
+   if(!translated)return json({error:'No s’ha pogut obtenir la traducció.'},502);
+   return json({translated_text:translated});
+  }catch(err){
+   console.error('TRANSLATION_ERROR',err);
+   return json({error:'No s’ha pogut traduir el text ara mateix.'},502);
+  }
+ }
  const teacherSubmissionAction=path.match(/^\/api\/teacher\/submissions\/(\d+)\/?$/);
  if(teacherSubmissionAction && (req.method==='POST'||req.method==='DELETE')){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
@@ -845,7 +871,7 @@ async function api(req,env){
   return json({ok:true});
  }
  // Durant un examen en curs, l'alumne només pot utilitzar les API pròpies de l'examen.
- if(user?.role==='student' && !path.startsWith('/api/exams/') && !path.startsWith('/api/exam-attempts/')){
+ if(user?.role==='student' && path!=='/api/translate' && !path.startsWith('/api/exams/') && !path.startsWith('/api/exam-attempts/')){
   await ensureExamTables(env);
   const active=await env.DB.prepare(`SELECT a.*,e.title exam_title,e.status exam_status,e.start_at,e.end_at,e.duration_minutes
     FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
