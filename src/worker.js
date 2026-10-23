@@ -1077,6 +1077,12 @@ async function api(req,env){
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='copy_paste') copy_paste_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='tab_hidden') tab_hidden_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_exit_count,
+    (SELECT COALESCE(SUM(
+      COALESCE(
+       CAST(json_extract(ev.meta_json,'$.duration_ms') AS INTEGER),
+       MAX(0,CAST((julianday(CURRENT_TIMESTAMP)-julianday(ev.created_at))*86400000 AS INTEGER))
+      )
+     ),0) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_out_ms,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline') drop_multiline_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='network_attempt') network_attempt_count,
     (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='large_insert') large_insert_count,
@@ -1256,9 +1262,27 @@ async function api(req,env){
   if(Number(count?.total||0)>=500)return json({ok:true,ignored:true});
   const qid=b.question_id==null?null:Number(b.question_id);
   const meta=JSON.stringify(b.meta&&typeof b.meta==='object'?b.meta:{}).slice(0,2000);
-  await env.DB.prepare('INSERT INTO exam_events(attempt_id,question_id,event_type,meta_json) VALUES(?,?,?,?)')
-    .bind(attemptId,qid,type,meta).run();
-  return json({ok:true});
+  const inserted=await env.DB.prepare('INSERT INTO exam_events(attempt_id,question_id,event_type,meta_json) VALUES(?,?,?,?) RETURNING id')
+    .bind(attemptId,qid,type,meta).first();
+  return json({ok:true,event_id:Number(inserted?.id||0)||null});
+ }
+
+ if(/^\/api\/exam-attempts\/\d+\/events\/\d+$/.test(path) && req.method==='PATCH' && user?.role==='student'){
+  await ensureExamTables(env);
+  const parts=path.split('/'),attemptId=Number(parts[3]),eventId=Number(parts[5]);
+  const ev=await env.DB.prepare(`SELECT ev.id,ev.event_type,ev.meta_json,a.user_id
+    FROM exam_events ev JOIN exam_attempts a ON a.id=ev.attempt_id
+    WHERE ev.id=? AND ev.attempt_id=? AND a.user_id=?`).bind(eventId,attemptId,user.id).first();
+  if(!ev)return json({error:'Alerta no trobada.'},404);
+  if(ev.event_type!=='fullscreen_exit')return json({error:'Aquesta alerta no es pot actualitzar.'},400);
+  let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  let meta={};try{meta=JSON.parse(ev.meta_json||'{}')}catch{}
+  const duration=Number(b.duration_ms);
+  if(Number.isFinite(duration))meta.duration_ms=Math.max(0,Math.min(12*60*60*1000,Math.round(duration)));
+  if(b.returned_at)meta.returned_at=String(b.returned_at).slice(0,80);
+  meta=JSON.stringify(meta).slice(0,2000);
+  await env.DB.prepare('UPDATE exam_events SET meta_json=? WHERE id=?').bind(meta,eventId).run();
+  return json({ok:true,event_id:eventId});
  }
  if(/^\/api\/exam-attempts\/\d+\/submit$/.test(path) && req.method==='POST' && user?.role==='student'){
   await ensureExamTables(env);
