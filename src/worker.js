@@ -770,6 +770,11 @@ async function api(req,env){
   if(!text)return json({error:'Escriu o carrega un text per traduir.'},400);
   if(text.length>3500)return json({error:'El text és massa llarg per al traductor.'},400);
   if(!allowed.has(source)||!allowed.has(target))return json({error:'Idioma no admès.'},400);
+  const lines=text.split(/\r?\n/).filter(x=>x.trim());
+  const commentsOnly=lines.length>0&&lines.every(x=>/^\s*#/.test(x));
+  const codeSignals=lines.filter(x=>/^\s*(?:def\b|class\b|if\b|elif\b|else\s*:|for\b|while\b|try\s*:|except\b|import\b|from\b|return\b|print\s*\(|input\s*\(|[A-Za-z_]\w*\s*=)/.test(x)).length;
+  if(lines.length>1&&codeSignals>0&&!commentsOnly)
+   return json({error:'El traductor està pensat per text natural i comentaris, no per blocs de codi.'},400);
   if(source===target)return json({translated_text:text});
   try{
    const out=await env.AI.run('@cf/meta/m2m100-1.2b',{
