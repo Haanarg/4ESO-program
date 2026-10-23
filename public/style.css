@@ -584,3 +584,60 @@ main{max-width:1720px}
   .student-translator-langs{grid-template-columns:1fr}
   .translator-swap{width:100%}
 }
+
+/* Colors d'alertes de seguretat */
+.security-alert{
+  border-left:4px solid #94a3b8!important;
+}
+.security-copy_paste{border-left-color:#fb7185!important;background:rgba(251,113,133,.07)!important}
+.security-statement_copy{border-left-color:#fbbf24!important;background:rgba(251,191,36,.07)!important}
+.security-tab_hidden{border-left-color:#38bdf8!important;background:rgba(56,189,248,.07)!important}
+.security-fullscreen_exit{border-left-color:#a78bfa!important;background:rgba(167,139,250,.08)!important}
+.security-drop_multiline{border-left-color:#f472b6!important;background:rgba(244,114,182,.07)!important}
+.security-network_attempt{border-left-color:#fb923c!important;background:rgba(251,146,60,.08)!important}
+.security-large_insert{border-left-color:#a3e635!important;background:rgba(163,230,53,.06)!important}
+.security-other{border-left-color:#94a3b8!important}
+
+.integrity-events .security-alert strong{color:#eef4fb}
+.integrity-events .security-copy_paste strong{color:#fda4af}
+.integrity-events .security-statement_copy strong{color:#fcd34d}
+.integrity-events .security-tab_hidden strong{color:#7dd3fc}
+.integrity-events .security-fullscreen_exit strong{color:#c4b5fd}
+.integrity-events .security-drop_multiline strong{color:#f9a8d4}
+.integrity-events .security-network_attempt strong{color:#fdba74}
+.integrity-events .security-large_insert strong{color:#bef264}
+
+.normal-integrity-panel li.security-alert{
+  list-style:none;
+  margin:7px 0;
+  padding:8px 10px;
+  border:1px solid #334155;
+  border-left-width:4px;
+  border-radius:7px;
+}
+.normal-integrity-panel ul{padding-left:0}
+
+.fullscreen-time{
+  display:block;
+  margin-top:4px;
+  color:#c4b5fd;
+  font-weight:750;
+  white-space:nowrap;
+}
+.fullscreen-total{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin:10px 0 12px;
+  padding:10px 12px;
+  border:1px solid rgba(167,139,250,.32);
+  border-radius:9px;
+  background:rgba(167,139,250,.08);
+  color:#ddd6fe;
+}
+.fullscreen-total span{
+  font-weight:900;
+  font-size:1.05rem;
+  white-space:nowrap;
+}
