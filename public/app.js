@@ -55,9 +55,18 @@ function loadStatementIntoTranslator(){
  if(status){status.textContent='Enunciat carregat';status.className='muted'}
 }
 function normalizeTranslatorText(v){return String(v||'').replace(/\r\n?/g,'\n').replace(/\n$/,'')}
+function translatorOutputLooksLikeCode(text){
+ const lines=normalizeTranslatorText(text).split('\n').filter(x=>x.trim());
+ if(lines.length<=1)return false;
+ const commentsOnly=lines.every(x=>/^\s*#/.test(x));
+ if(commentsOnly)return false;
+ return lines.some(x=>/^\s*(?:def\b|class\b|if\b|elif\b|else\s*:|for\b|while\b|try\s*:|except\b|import\b|from\b|return\b|print\s*\(|input\s*\(|[A-Za-z_]\w*\s*=)/.test(x));
+}
 function isStudentTranslatorPaste(lines){
  const pasted=normalizeTranslatorText(Array.isArray(lines)?lines.join('\n'):lines);
- return !!studentTranslatorLastOutput && pasted===normalizeTranslatorText(studentTranslatorLastOutput);
+ return !!studentTranslatorLastOutput
+  && pasted===normalizeTranslatorText(studentTranslatorLastOutput)
+  && !translatorOutputLooksLikeCode(pasted);
 }
 async function translateStudentText(){
  const input=$('#translator-input'),output=$('#translator-output'),status=$('#translator-status');
