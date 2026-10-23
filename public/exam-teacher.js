@@ -184,6 +184,18 @@ function examAlertTotal(a){
 function securityAlertClass(type){
   return 'security-alert security-'+String(type||'other').replace(/[^a-z0-9_-]/gi,'');
 }
+function examSecurityChips(a){
+  const types=[
+    ['copy_paste','copy_paste_count'],['statement_copy','statement_copy_count'],
+    ['tab_hidden','tab_hidden_count'],['fullscreen_exit','fullscreen_exit_count'],
+    ['drop_multiline','drop_multiline_count'],['network_attempt','network_attempt_count'],
+    ['large_insert','large_insert_count']
+  ];
+  return types.map(([type,key])=>{
+    const n=Number(a[key]||0);if(!n)return '';
+    return `<span class="security-chip security-${type}" title="${esc(integrityEventLabel(type))} · ${n}">⚠${n>1?' '+n:''}</span>`;
+  }).join('');
+}
 function formatSecurityDuration(ms){
   const sec=Math.max(0,Math.round(Number(ms||0)/1000));
   if(sec<60)return sec+' s';
@@ -213,7 +225,7 @@ async function teacherExamResults(examId){
   try{
     const d=await api(`/api/teacher/exams/${examId}/results`),e=d.exam,ats=d.attempts||[];
     $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(e.title)} · Lliuraments</h1><p>${ats.length} intents registrats.</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${e.id})">↻ Actualitza</button><button class="secondary" onclick="teacherEditExam(${e.id})">⚙ Configura</button><button class="secondary" onclick="teacherExams()">← Exàmens</button></div></div>
-      <div class="exam-results-table-wrap"><table class="exam-results-table"><thead><tr><th>Alumne</th><th>Estat</th><th>Inici</th><th>Lliurament</th><th>Alertes</th><th>Nota</th><th></th></tr></thead><tbody>${ats.map(a=>{const alerts=examAlertTotal(a);return `<tr><td><strong>${esc(a.name)}</strong><small>${esc(a.email)}</small></td><td>${a.status==='graded'?'Corregit':a.status==='submitted'?'Lliurat':'En curs'}</td><td>${esc(fmtDateTime(a.started_at))}</td><td>${esc(fmtDateTime(a.submitted_at))}</td><td><span class="${alerts?'integrity-badge alert':'integrity-badge'}">${alerts}</span>${Number(a.fullscreen_out_ms||0)>0?`<small class="fullscreen-time">⛶ ${esc(formatSecurityDuration(a.fullscreen_out_ms))}</small>`:''}</td><td>${a.final_score==null?'—':esc(a.final_score)+'/10'}</td><td><button class="secondary" onclick="teacherGradeExamAttempt(${a.id})">${a.status==='in_progress'?'Veure':'Corregir'}</button></td></tr>`}).join('')||'<tr><td colspan="7">Encara no hi ha intents.</td></tr>'}</tbody></table></div>`;
+      <div class="exam-results-table-wrap"><table class="exam-results-table"><thead><tr><th>Alumne</th><th>Estat</th><th>Inici</th><th>Lliurament</th><th>Alertes</th><th>Nota</th><th></th></tr></thead><tbody>${ats.map(a=>{const alerts=examAlertTotal(a);return `<tr><td><strong>${esc(a.name)}</strong><small>${esc(a.email)}</small></td><td>${a.status==='graded'?'Corregit':a.status==='submitted'?'Lliurat':'En curs'}</td><td>${esc(fmtDateTime(a.started_at))}</td><td>${esc(fmtDateTime(a.submitted_at))}</td><td><div class="security-chip-row">${alerts?examSecurityChips(a):'<span class="integrity-badge">0</span>'}</div>${Number(a.fullscreen_out_ms||0)>0?`<small class="fullscreen-time">⛶ ${esc(formatSecurityDuration(a.fullscreen_out_ms))}</small>`:''}</td><td>${a.final_score==null?'—':esc(a.final_score)+'/10'}</td><td><button class="secondary" onclick="teacherGradeExamAttempt(${a.id})">${a.status==='in_progress'?'Veure':'Corregir'}</button></td></tr>`}).join('')||'<tr><td colspan="7">Encara no hi ha intents.</td></tr>'}</tbody></table></div>`;
   }catch(e){alert(e.message);teacherExams()}
 }
 function integrityEventLabel(type){
