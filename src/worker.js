@@ -123,10 +123,16 @@ async function ensureExamTables(env){
      meta_json TEXT NOT NULL DEFAULT '{}',
      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
    )`).run();
+   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS exam_event_dismissals(
+     event_id INTEGER PRIMARY KEY,
+     dismissed_by INTEGER NOT NULL,
+     dismissed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`).run();
    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_questions_exam ON exam_questions(exam_id,position)').run();
    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_attempts_exam_user ON exam_attempts(exam_id,user_id)').run();
    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_answers_attempt ON exam_answers(attempt_id,question_id)').run();
    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_events_attempt ON exam_events(attempt_id,created_at)').run();
+   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_event_dismissals_time ON exam_event_dismissals(dismissed_at)').run();
   examSchemaReady=true;
  })();
  try{await examSchemaPromise}
@@ -958,6 +964,7 @@ async function api(req,env){
 
   const attemptCount=Number((await env.DB.prepare('SELECT COUNT(*) total FROM exam_attempts WHERE exam_id=?').bind(id).first())?.total||0);
   await env.DB.batch([
+   env.DB.prepare('DELETE FROM exam_event_dismissals WHERE event_id IN (SELECT ev.id FROM exam_events ev JOIN exam_attempts a ON a.id=ev.attempt_id WHERE a.exam_id=?)').bind(id),
    env.DB.prepare('DELETE FROM exam_events WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id=?)').bind(id),
    env.DB.prepare('DELETE FROM exam_answers WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id=?)').bind(id),
    env.DB.prepare('DELETE FROM exam_attempts WHERE exam_id=?').bind(id),
@@ -1074,19 +1081,19 @@ async function api(req,env){
   }
   const q=await env.DB.prepare('SELECT id,position,title,max_score FROM exam_questions WHERE exam_id=? ORDER BY position,id').bind(id).all();
   const attempts=await env.DB.prepare(`SELECT a.*,u.name,u.email,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='copy_paste') copy_paste_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='tab_hidden') tab_hidden_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_exit_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='copy_paste' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) copy_paste_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='tab_hidden' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) tab_hidden_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) fullscreen_exit_count,
     (SELECT COALESCE(SUM(
       COALESCE(
        CAST(json_extract(ev.meta_json,'$.duration_ms') AS INTEGER),
        MAX(0,CAST((julianday(COALESCE(a.submitted_at,CURRENT_TIMESTAMP))-julianday(ev.created_at))*86400000 AS INTEGER))
       )
-     ),0) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit') fullscreen_out_ms,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline') drop_multiline_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='network_attempt') network_attempt_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='large_insert') large_insert_count,
-    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='statement_copy') statement_copy_count
+     ),0) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='fullscreen_exit' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) fullscreen_out_ms,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='drop_multiline' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) drop_multiline_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='network_attempt' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) network_attempt_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='large_insert' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) large_insert_count,
+    (SELECT COUNT(*) FROM exam_events ev WHERE ev.attempt_id=a.id AND ev.event_type='statement_copy' AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)) statement_copy_count
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY u.name COLLATE NOCASE`).bind(id).all();
   return json({exam:{...exam,effective_state:examState(exam)},questions:q.results||[],attempts:attempts.results||[]});
  }
@@ -1104,8 +1111,21 @@ async function api(req,env){
   }
   const questions=await env.DB.prepare('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY position,id').bind(attempt.exam_id).all();
   const answers=await env.DB.prepare('SELECT * FROM exam_answers WHERE attempt_id=?').bind(id).all();
-  const events=await env.DB.prepare('SELECT * FROM exam_events WHERE attempt_id=? ORDER BY created_at,id').bind(id).all();
+  const events=await env.DB.prepare(`SELECT ev.* FROM exam_events ev
+    WHERE ev.attempt_id=? AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)
+    ORDER BY ev.created_at,ev.id`).bind(id).all();
   return json({attempt,questions:questions.results||[],answers:answers.results||[],events:events.results||[]});
+ }
+ if(/^\/api\/teacher\/exam-events\/\d+\/dismiss$/.test(path) && req.method==='POST' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const eventId=Number(path.split('/')[4]);
+  const ev=await env.DB.prepare('SELECT id,attempt_id FROM exam_events WHERE id=?').bind(eventId).first();
+  if(!ev)return json({error:'Alerta no trobada.'},404);
+  await env.DB.prepare(`INSERT INTO exam_event_dismissals(event_id,dismissed_by,dismissed_at)
+    VALUES(?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(event_id) DO UPDATE SET dismissed_by=excluded.dismissed_by,dismissed_at=CURRENT_TIMESTAMP`)
+    .bind(eventId,user.id).run();
+  return json({ok:true,event_id:eventId,attempt_id:ev.attempt_id});
  }
  if(/^\/api\/teacher\/exam-attempts\/\d+\/grade$/.test(path) && req.method==='POST' && user?.role==='teacher'){
   await ensureExamTables(env);
