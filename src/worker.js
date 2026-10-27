@@ -58,6 +58,24 @@ async function ensureExerciseIntegrityTable(env){
  catch(err){exerciseIntegritySchemaPromise=null;throw err}
 }
 
+// Resums per intent: les alertes continuen vinculades al lliurament original
+// quan es retorna, es requalifica o se'n genera una altra proposta d'IA.
+async function exerciseIntegrityCountsBySubmission(env,userId=null){
+ await ensureExerciseIntegrityTable(env);
+ const query=userId==null
+  ? 'SELECT submission_id,event_type,COUNT(*) AS total FROM exercise_integrity_events WHERE submission_id IS NOT NULL GROUP BY submission_id,event_type'
+  : 'SELECT submission_id,event_type,COUNT(*) AS total FROM exercise_integrity_events WHERE user_id=? AND submission_id IS NOT NULL GROUP BY submission_id,event_type';
+ const rows=userId==null ? await env.DB.prepare(query).all() : await env.DB.prepare(query).bind(userId).all();
+ const bySubmission=new Map();
+ for(const row of rows.results||[]){
+  const id=Number(row.submission_id),total=Number(row.total||0);
+  if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(total)||total<=0)continue;
+  if(!bySubmission.has(id))bySubmission.set(id,[]);
+  bySubmission.get(id).push({event_type:String(row.event_type||''),count:total});
+ }
+ return bySubmission;
+}
+
 const RESET_CODE_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function normalizeResetCode(code){return String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
 function newPasswordResetCode(){
@@ -1534,7 +1552,8 @@ pwd2 = input()
  const exs=(await env.DB.prepare(`SELECT id,chapter,code,title,sort_order FROM exercises ORDER BY chapter,sort_order,id`).all()).results;
  const subs=(await env.DB.prepare(`SELECT s.id,s.exercise_id,s.status,s.final_score,s.submitted_at,s.validated_at,s.ai_result_json,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s LEFT JOIN submission_feedback f ON f.submission_id=s.id WHERE s.user_id=? ORDER BY s.exercise_id,s.id`).bind(id).all()).results;
  const drafts=(await env.DB.prepare(`SELECT exercise_id,updated_at FROM drafts WHERE user_id=?`).bind(id).all()).results;
- return json({student,exercises:exs,submissions:subs,drafts});
+ const byIntegrity=await exerciseIntegrityCountsBySubmission(env,id);
+ return json({student,exercises:exs,submissions:subs.map(s=>({...s,integrity_counts:byIntegrity.get(Number(s.id))||[]})),drafts});
  }
  if(path==='/api/teacher/progress' && user?.role==='teacher'){
   try{
@@ -1557,7 +1576,8 @@ pwd2 = input()
       ) latest ON latest.max_id=s.id
       ORDER BY s.id DESC`).all()).results;
     const drafts=(await env.DB.prepare(`SELECT user_id,exercise_id,updated_at FROM drafts`).all()).results;
-    return json({students,exercises:exs,submissions:subs,drafts});
+    const byIntegrity=await exerciseIntegrityCountsBySubmission(env);
+    return json({students,exercises:exs,submissions:subs.map(s=>({...s,integrity_counts:byIntegrity.get(Number(s.id))||[]})),drafts});
   }catch(e){return json({error:'No s’ha pogut carregar el seguiment.',detail:String(e?.message||e)},500)}
  }
  if(path==='/api/teacher/submissions' && user?.role==='teacher'){
