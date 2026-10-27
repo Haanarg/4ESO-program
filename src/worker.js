@@ -799,12 +799,29 @@ async function api(req,env){
    return json({error:'No s’ha pogut traduir el text ara mateix.'},502);
   }
  }
+ // Tornar a analitzar no canvia la qualificació del professor.
+ const teacherSubmissionRegrade=path.match(/^\/api\/teacher\/submissions\/(\d+)\/regrade-ai$/);
+ if(teacherSubmissionRegrade && req.method==='POST'){
+  if(!user)return json({error:'Cal iniciar sessió.'},401);
+  if(user.role!=='teacher')return json({error:'Accés restringit al professor.'},403);
+  const submissionId=Number(teacherSubmissionRegrade[1]);
+  const row=await env.DB.prepare('SELECT s.id,s.code,s.test_results_json,e.* FROM submissions s JOIN exercises e ON e.id=s.exercise_id WHERE s.id=?').bind(submissionId).first();
+  if(!row)return json({error:'Entrega no trobada.'},404);
+  if(!env.AI)return json({error:'Workers AI no està disponible. Pots continuar corregint manualment.'},503);
+  let tests=[];
+  try{const parsed=JSON.parse(row.test_results_json||'[]');if(Array.isArray(parsed))tests=parsed}catch{}
+  const proposal=await aiGrade(env,row,String(row.code||''),tests);
+  if(proposal.score==null || !Number.isFinite(Number(proposal.score)))
+   return json({error:'No s’ha pogut tornar a corregir amb IA (potser s’ha arribat al límit gratuït). La nota del professor no ha canviat.'},502);
+  await env.DB.prepare('UPDATE submissions SET ai_result_json=? WHERE id=?').bind(JSON.stringify(proposal),submissionId).run();
+  return json({ok:true,ai:proposal});
+ }
  const teacherSubmissionAction=path.match(/^\/api\/teacher\/submissions\/(\d+)\/?$/);
- if(teacherSubmissionAction && (req.method==='POST'||req.method==='DELETE')){
+ if(teacherSubmissionAction && (req.method==='GET'||req.method==='POST'||req.method==='DELETE')){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
   if(user.role!=='teacher')return json({error:'Accés restringit al professor.'},403);
   const id=Number(teacherSubmissionAction[1]);
-  const existing=await env.DB.prepare('SELECT id,final_score FROM submissions WHERE id=?').bind(id).first();
+  const existing=await env.DB.prepare('SELECT id,status,final_score FROM submissions WHERE id=?').bind(id).first();
   if(!existing)return json({error:'Entrega no trobada.'},404);
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS submission_feedback(
     submission_id INTEGER PRIMARY KEY,
@@ -812,6 +829,16 @@ async function api(req,env){
     returned_score REAL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`).run();
+  if(req.method==='GET'){
+   const submission=await env.DB.prepare("SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at, u.name AS student_name,e.code AS exercise_code,e.title,e.statement,e.starter_code,e.rubric_json, COALESCE(f.teacher_comment,'') AS teacher_comment,f.returned_score FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id WHERE s.id=?").bind(id).first();
+   await ensureExerciseIntegrityTable(env);
+   const eventRows=await env.DB.prepare('SELECT event_type,meta_json,created_at FROM exercise_integrity_events WHERE submission_id=? ORDER BY id').bind(id).all();
+   const integrity_events=(eventRows.results||[]).map(ev=>{
+    let meta={};try{meta=JSON.parse(ev.meta_json||'{}')}catch{}
+    return {event_type:ev.event_type,meta,created_at:ev.created_at};
+   });
+   return json({submission:{...submission,integrity_events}});
+  }
   if(req.method==='DELETE'){
    await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id=?').bind(id).run();
    await ensureExerciseIntegrityTable(env);
@@ -821,6 +848,22 @@ async function api(req,env){
   }
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
   const comment=String(b.comment||'').trim().slice(0,4000);
+  if(b.action==='revise'){
+   // Revisar una nota NO converteix una entrega retornada en validada.
+   const missing=b.score==null||String(b.score).trim()==='';
+   const score=missing?null:Number(b.score);
+   if((missing&&existing.status!=='returned')||(!missing&&(!Number.isFinite(score)||score<0||score>10)))
+    return json({error:'Indica una nota vàlida entre 0 i 10.'},400);
+   if(existing.status==='returned'){
+    await env.DB.prepare('INSERT INTO submission_feedback(submission_id,teacher_comment,returned_score,updated_at) VALUES(?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(submission_id) DO UPDATE SET teacher_comment=excluded.teacher_comment,returned_score=excluded.returned_score,updated_at=CURRENT_TIMESTAMP')
+     .bind(id,comment,score).run();
+    return json({ok:true,status:'returned',score});
+   }
+   await env.DB.prepare('INSERT INTO submission_feedback(submission_id,teacher_comment,returned_score,updated_at) VALUES(?,?,NULL,CURRENT_TIMESTAMP) ON CONFLICT(submission_id) DO UPDATE SET teacher_comment=excluded.teacher_comment,returned_score=NULL,updated_at=CURRENT_TIMESTAMP')
+    .bind(id,comment).run();
+   await env.DB.prepare("UPDATE submissions SET final_score=?,status='validated',validated_at=CURRENT_TIMESTAMP WHERE id=?").bind(score,id).run();
+   return json({ok:true,status:'validated',score});
+  }
   if(b.action==='return'){
    const proposed=Number(b.score);
    const kept=Number.isFinite(proposed)&&proposed>=0&&proposed<=10?proposed:(existing.final_score??null);
