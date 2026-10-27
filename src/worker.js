@@ -805,12 +805,12 @@ async function api(req,env){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
   if(user.role!=='teacher')return json({error:'Accés restringit al professor.'},403);
   const submissionId=Number(teacherSubmissionRegrade[1]);
-  const row=await env.DB.prepare('SELECT s.id,s.code,s.test_results_json,e.* FROM submissions s JOIN exercises e ON e.id=s.exercise_id WHERE s.id=?').bind(submissionId).first();
+  const row=await env.DB.prepare('SELECT s.id,s.code AS student_code,s.test_results_json,e.* FROM submissions s JOIN exercises e ON e.id=s.exercise_id WHERE s.id=?').bind(submissionId).first();
   if(!row)return json({error:'Entrega no trobada.'},404);
   if(!env.AI)return json({error:'Workers AI no està disponible. Pots continuar corregint manualment.'},503);
   let tests=[];
   try{const parsed=JSON.parse(row.test_results_json||'[]');if(Array.isArray(parsed))tests=parsed}catch{}
-  const proposal=await aiGrade(env,row,String(row.code||''),tests);
+  const proposal=await aiGrade(env,row,String(row.student_code||''),tests);
   if(proposal.score==null || !Number.isFinite(Number(proposal.score)))
    return json({error:'No s’ha pogut tornar a corregir amb IA (potser s’ha arribat al límit gratuït). La nota del professor no ha canviat.'},502);
   await env.DB.prepare('UPDATE submissions SET ai_result_json=? WHERE id=?').bind(JSON.stringify(proposal),submissionId).run();
