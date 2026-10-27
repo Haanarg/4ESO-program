@@ -261,6 +261,23 @@ async function deleteStudent(id,name){
 }
 
 
+function exerciseIntegrityMiniChips(counts){
+ if(!Array.isArray(counts)||!counts.length)return '';
+ const names={copy_paste:'ALERTA DE COPY-PASTE',statement_copy:'Còpia directa de l’enunciat'};
+ const icons={copy_paste:'📋',statement_copy:'📄'};
+ const items=counts.filter(c=>Number(c.count)>0)
+  .sort((a,b)=>String(a.event_type).localeCompare(String(b.event_type)));
+ if(!items.length)return '';
+ return '<span class="progress-cell-alerts" aria-label="Alertes de salvaguarda">'+items.map(c=>{
+  const type=String(c.event_type||''),number=Number(c.count);
+  const safeType=type.replace(/[^a-z0-9_-]/gi,'');
+  const label=names[type]||type||'Alerta de salvaguarda';
+  const description=label+' · '+number+' '+(number===1?'incidència':'incidències')+' · Obre la correcció per veure-les';
+  return '<span class="security-chip progress-security-chip security-'+safeType+'" role="img" aria-label="'+esc(description)+'" title="'+esc(description)+'">'+
+    (icons[type]||'⚠')+(number>1?'<small>'+esc(number)+'</small>':'')+'</span>';
+ }).join('')+'</span>';
+}
+
 function teacherProgressCorrectionLink(submission,studentId,origin,label,cssClass,title){
   return '<button type="button" class="progress-correction-link '+cssClass+'" title="'+esc(title||'Obre la correcció')+'" onclick="teacherOpenSubmissionCorrection('+Number(submission.id)+','+Number(studentId)+',\''+origin+'\')">'+label+'</button>';
 }
@@ -305,7 +322,7 @@ async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progres
       (Array.isArray(rubric)&&rubric.length?'<details><summary>Rúbrica</summary><ul>'+rubric.map(x=>'<li>'+esc(x[0])+': '+esc(x[1])+' punts</li>').join('')+'</ul></details>':'')+
       (s.starter_code?'<details><summary>Codi inicial que rebia l’alumne</summary><pre>'+esc(s.starter_code)+'</pre></details>':'')+
       '<h2>Codi lliurat</h2><pre class="teacher-regrade-code">'+esc(s.student_code||'')+'</pre>'+
-      (integrity.length?'<details class="normal-integrity-panel"><summary>⚠ Alertes d’integritat ('+integrity.length+')</summary><ul>'+integrity.map(ev=>'<li><strong>'+esc(exerciseIntegrityReason(ev))+'</strong> '+esc(exerciseIntegrityTime(ev))+'</li>').join('')+'</ul></details>':'')+
+      (integrity.length?'<div class="teacher-regrade-integrity-chips"><strong>Alertes de salvaguarda:</strong> <span class="security-chip-row">'+exerciseIntegrityChips(integrity)+'</span></div><details class="normal-integrity-panel"><summary>⚠ Alertes d’integritat ('+integrity.length+')</summary><ul>'+integrity.map(ev=>'<li><strong>'+esc(exerciseIntegrityReason(ev))+'</strong> '+esc(exerciseIntegrityTime(ev))+'</li>').join('')+'</ul></details>':'')+
       '</section><section class="card teacher-regrade-side"><h2>Correcció</h2>'+
       '<p class="muted">Modifica la nota i els comentaris o demana una altra proposta a la IA. La nova anàlisi no canvia la nota del professor.</p>'+
       '<button id="teacher-regrade-ai-btn" class="secondary" onclick="teacherRepeatCorrectionAI('+Number(s.id)+')">✨ Torna a corregir amb IA</button>'+
@@ -368,7 +385,7 @@ function filterProgressChapter(){const v=$('#progress-chapter')?.value||'all';do
 async function teacherStudentDetail(id){
  const d=await api(`/api/teacher/students/${id}/progress`),{student,exercises:exs,submissions:subs,drafts}=d,byEx={};for(const s of subs)(byEx[s.exercise_id]??=[]).push(s);
  const val=subs.filter(s=>s.status==='validated'&&s.final_score!=null),avg=val.length?(val.reduce((x,s)=>x+Number(s.final_score),0)/val.length).toFixed(1):'—',chs=[...new Set(exs.map(e=>e.chapter))];
- $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><div class="student-detail-actions"><button id="reset-pass-${student.id}" class="secondary" onclick="generatePasswordReset(${student.id})">🔑 Genera codi</button><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${teacherProgressCorrectionLink(s,student.id,'detail',n!=null?esc(n)+'/10':'Corregir','history-correction-button',s.status==='returned'?'Reobre la correcció de l’intent retornat':'Reobre la correcció d’aquest intent')}</strong><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
+ $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><div class="student-detail-actions"><button id="reset-pass-${student.id}" class="secondary" onclick="generatePasswordReset(${student.id})">🔑 Genera codi</button><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${teacherProgressCorrectionLink(s,student.id,'detail',n!=null?esc(n)+'/10':'Corregir','history-correction-button',s.status==='returned'?'Reobre la correcció de l’intent retornat':'Reobre la correcció d’aquest intent')}</strong><span class="history-state-and-alerts"><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${exerciseIntegrityMiniChips(s.integrity_counts)}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
 }
 async function teacherProgress(){
   const d=await api('/api/teacher/progress');
@@ -419,7 +436,7 @@ async function teacherProgress(){
             ${students.map(st=>`<tr>
               <th class="student-col"><div class="student-identity"><div class="student-open" onclick="teacherStudentDetail(${st.id})"><strong>${esc(st.name)}</strong><small>${esc(st.email)}</small></div><div class="student-row-actions"><button class="mini-btn" title="Editar alumne" onclick='editStudent(${JSON.stringify(st)})'>✏ Edita</button><button id="reset-pass-${st.id}" class="mini-btn reset-password-btn" title="Genera un codi temporal per restablir la contrasenya" onclick="generatePasswordReset(${st.id})">🔑 Codi</button><button class="mini-btn delete-student-btn" title="Eliminar alumne" onclick='deleteStudent(${st.id},${JSON.stringify(st.name)})'>🗑</button></div></div></th>
               <td class="summary-col"><strong>${completedFor(st)}/${exs.length}</strong></td>
-              ${exs.map(e=>`<td data-chapter="${e.chapter}">${cell(st,e)}</td>`).join('')}
+              ${exs.map(e=>`<td data-chapter="${e.chapter}"><div class="progress-cell-content">${cell(st,e)}${exerciseIntegrityMiniChips(subMap.get(`${st.id}:${e.id}`)?.integrity_counts)}</div></td>`).join('')}
             </tr>`).join('') || `<tr><td colspan="${exs.length+2}">Encara no hi ha alumnes registrats.</td></tr>`}
           </tbody>
         </table>
