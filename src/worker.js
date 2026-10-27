@@ -1,3 +1,5 @@
+import { examAnswerFingerprint, gradeExamQuestionAI } from './exam-ai.js';
+
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const text = (data, status=200) => new Response(data, {status, headers:{'content-type':'text/plain; charset=utf-8'}});
 
@@ -133,6 +135,7 @@ async function ensureExamTables(env){
    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_answers_attempt ON exam_answers(attempt_id,question_id)').run();
    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_events_attempt ON exam_events(attempt_id,created_at)').run();
    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_exam_event_dismissals_time ON exam_event_dismissals(dismissed_at)').run();
+   await env.DB.prepare('CREATE TABLE IF NOT EXISTS exam_ai_suggestions (attempt_id INTEGER NOT NULL, question_id INTEGER NOT NULL, answer_hash TEXT NOT NULL, score REAL NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(attempt_id,question_id))').run();
   examSchemaReady=true;
  })();
  try{await examSchemaPromise}
@@ -966,6 +969,7 @@ async function api(req,env){
   await env.DB.batch([
    env.DB.prepare('DELETE FROM exam_event_dismissals WHERE event_id IN (SELECT ev.id FROM exam_events ev JOIN exam_attempts a ON a.id=ev.attempt_id WHERE a.exam_id=?)').bind(id),
    env.DB.prepare('DELETE FROM exam_events WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id=?)').bind(id),
+   env.DB.prepare('DELETE FROM exam_ai_suggestions WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id=?)').bind(id),
    env.DB.prepare('DELETE FROM exam_answers WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id=?)').bind(id),
    env.DB.prepare('DELETE FROM exam_attempts WHERE exam_id=?').bind(id),
    env.DB.prepare('DELETE FROM exam_questions WHERE exam_id=?').bind(id),
@@ -1114,7 +1118,18 @@ async function api(req,env){
   const events=await env.DB.prepare(`SELECT ev.* FROM exam_events ev
     WHERE ev.attempt_id=? AND NOT EXISTS (SELECT 1 FROM exam_event_dismissals d WHERE d.event_id=ev.id)
     ORDER BY ev.created_at,ev.id`).bind(id).all();
-  return json({attempt,questions:questions.results||[],answers:answers.results||[],events:events.results||[]});
+  const suggestions=await env.DB.prepare('SELECT * FROM exam_ai_suggestions WHERE attempt_id=?').bind(id).all();
+  const questionById=new Map((questions.results||[]).map(q=>[Number(q.id),q]));
+  const answerById=new Map((answers.results||[]).map(a=>[Number(a.question_id),a]));
+  const aiSuggestions=[];
+  for(const row of suggestions.results||[]){
+   const q=questionById.get(Number(row.question_id));
+   if(!q)continue;
+   const actualHash=await examAnswerFingerprint(q,answerById.get(Number(row.question_id))||{});
+   if(actualHash!==row.answer_hash)continue;
+   try{aiSuggestions.push({question_id:row.question_id,...JSON.parse(row.result_json),created_at:row.created_at})}catch{}
+  }
+  return json({attempt,questions:questions.results||[],answers:answers.results||[],events:events.results||[],ai_suggestions:aiSuggestions});
  }
  if(/^\/api\/teacher\/exam-events\/\d+\/dismiss$/.test(path) && req.method==='POST' && user?.role==='teacher'){
   await ensureExamTables(env);
@@ -1126,6 +1141,36 @@ async function api(req,env){
     ON CONFLICT(event_id) DO UPDATE SET dismissed_by=excluded.dismissed_by,dismissed_at=CURRENT_TIMESTAMP`)
     .bind(eventId,user.id).run();
   return json({ok:true,event_id:eventId,attempt_id:ev.attempt_id});
+ }
+ if(/^\/api\/teacher\/exam-attempts\/\d+\/ai-grade\/\d+$/.test(path) && req.method==='POST' && user?.role==='teacher'){
+  await ensureExamTables(env);
+  const parts=path.split('/'),attemptId=Number(parts[4]),questionId=Number(parts[6]);
+  let attempt=await env.DB.prepare('SELECT * FROM exam_attempts WHERE id=?').bind(attemptId).first();
+  if(!attempt)return json({error:'Intent d’examen no trobat.'},404);
+  if(attempt.status==='in_progress'){
+   const exam=await env.DB.prepare('SELECT * FROM exams WHERE id=?').bind(attempt.exam_id).first();
+   attempt=await autoSubmitExpiredExam(env,exam,attempt);
+  }
+  if(attempt.status==='in_progress')return json({error:'Només es poden analitzar exàmens ja lliurats.'},409);
+  const q=await env.DB.prepare('SELECT * FROM exam_questions WHERE id=? AND exam_id=?').bind(questionId,attempt.exam_id).first();
+  if(!q)return json({error:'Exercici d’examen no trobat.'},404);
+  const answer=(await env.DB.prepare('SELECT code,stdin FROM exam_answers WHERE attempt_id=? AND question_id=?').bind(attemptId,questionId).first())||{};
+  let b={};try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
+  const hash=await examAnswerFingerprint(q,answer);
+  const previous=await env.DB.prepare('SELECT answer_hash,result_json,created_at FROM exam_ai_suggestions WHERE attempt_id=? AND question_id=?').bind(attemptId,questionId).first();
+  if(previous&&previous.answer_hash===hash&&b.force!==true){
+   try{return json({proposal:{question_id:questionId,...JSON.parse(previous.result_json),created_at:previous.created_at},cached:true})}catch{}
+  }
+  if(!env.AI)return json({error:'Workers AI no està disponible. La correcció manual continua funcionant.'},503);
+  let proposal;
+  try{proposal=await gradeExamQuestionAI(env,q,answer)}
+  catch(err){
+   console.error('EXAM_AI_GRADE_ERROR',String(err?.message||err));
+   return json({error:'La IA no ha pogut completar la proposta (potser s’ha assolit el límit gratuït). Continua manualment o torna-ho a provar.'},502);
+  }
+  await env.DB.prepare('INSERT INTO exam_ai_suggestions(attempt_id,question_id,answer_hash,score,result_json,created_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(attempt_id,question_id) DO UPDATE SET answer_hash=excluded.answer_hash,score=excluded.score,result_json=excluded.result_json,created_at=CURRENT_TIMESTAMP')
+   .bind(attemptId,questionId,hash,proposal.score,JSON.stringify(proposal)).run();
+  return json({proposal:{question_id:questionId,...proposal,created_at:new Date().toISOString()},cached:false});
  }
  if(/^\/api\/teacher\/exam-attempts\/\d+\/grade$/.test(path) && req.method==='POST' && user?.role==='teacher'){
   await ensureExamTables(env);
