@@ -735,3 +735,12 @@ button.history-correction-button{border:1px solid rgba(103,232,249,.3);border-ra
 .teacher-regrade-notice{border-left:3px solid #a78bfa;padding:8px 12px;background:rgba(167,139,250,.05);font-size:13px}
 .teacher-regrade-actions{display:flex;gap:10px;flex-wrap:wrap}
 @media(max-width:900px){.teacher-regrade-layout{grid-template-columns:1fr}}
+
+
+/* Alertes de salvaguarda, agrupades per intent i visibles a cada nota */
+.progress-cell-content{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;min-width:0}
+.progress-cell-alerts{display:inline-flex;align-items:center;justify-content:center;gap:3px;flex-wrap:wrap;min-width:0}
+.progress-security-chip{min-height:19px;min-width:19px;padding:1px 3px;font-size:11px;line-height:1;white-space:nowrap}
+.progress-security-chip small{font-size:9px;font-weight:800;margin-left:2px}
+.history-state-and-alerts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.teacher-regrade-integrity-chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0;font-size:12px}
