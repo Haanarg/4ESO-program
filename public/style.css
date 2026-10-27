@@ -704,3 +704,34 @@ main{max-width:1720px}
 .exam-ai-explanation li { margin: .35rem 0; overflow-wrap: anywhere; }
 .exam-ai-warning { border-left: 3px solid #b97918; padding: .35rem .7rem; }
 .exam-ai-question-button { margin: .25rem 0 .6rem; }
+
+/* Accés a la correcció des del seguiment */
+button.progress-correction-link{cursor:pointer;font:inherit;margin:0;text-decoration:none}
+button.progress-correction-link:hover{filter:brightness(1.25);box-shadow:0 0 0 2px rgba(103,232,249,.2)}
+button.progress-correction-link:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+button.progress-correction-link.progress-grade{padding:0 9px}
+button.progress-correction-link.progress-grade.pass{color:#86efac}
+button.progress-correction-link.progress-grade.fail{color:#fca5a5}
+button.progress-correction-link.progress-state{border:1px solid transparent;min-height:30px}
+button.progress-correction-link.progress-state.returned{color:#c4b5fd;border-color:rgba(196,181,253,.2)}
+button.progress-correction-link.progress-state.pending{color:#fde68a}
+.progress-draft-indicator{display:block;font-size:10px;color:#93c5fd;margin-top:4px}
+button.history-correction-button{border:1px solid rgba(103,232,249,.3);border-radius:7px;padding:4px 8px;background:#0d2632;color:#a5f3fc;font-weight:800}
+.teacher-regrade-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(330px,.85fr);gap:16px;align-items:start}
+.teacher-regrade-layout>.card{min-width:0;margin:0}
+.teacher-regrade-statement{white-space:pre-wrap;overflow-wrap:anywhere}
+.teacher-regrade-code{white-space:pre-wrap;overflow-wrap:anywhere;max-height:70vh;overflow:auto;tab-size:4}
+.teacher-regrade-work details{margin:12px 0}
+.teacher-regrade-work pre{padding:14px;background:#050a12;border:1px solid #253c54;border-radius:8px}
+.teacher-regrade-side>h2{margin-top:0}
+.teacher-regrade-ai{padding:13px;border:1px solid #314966;border-radius:10px;margin:12px 0;background:rgba(103,232,249,.025)}
+.teacher-regrade-ai-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.teacher-regrade-ai ul{padding-left:20px}
+.teacher-regrade-ai li{margin:6px 0}
+.teacher-regrade-fields{display:grid;gap:13px;margin:16px 0}
+.teacher-regrade-fields label{display:grid;gap:6px;font-size:13px;font-weight:700}
+.teacher-regrade-fields input,.teacher-regrade-fields textarea{box-sizing:border-box;width:100%;font:inherit}
+.teacher-regrade-fields input{max-width:130px}
+.teacher-regrade-notice{border-left:3px solid #a78bfa;padding:8px 12px;background:rgba(167,139,250,.05);font-size:13px}
+.teacher-regrade-actions{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:900px){.teacher-regrade-layout{grid-template-columns:1fr}}

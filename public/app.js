@@ -368,7 +368,7 @@ function filterProgressChapter(){const v=$('#progress-chapter')?.value||'all';do
 async function teacherStudentDetail(id){
  const d=await api(`/api/teacher/students/${id}/progress`),{student,exercises:exs,submissions:subs,drafts}=d,byEx={};for(const s of subs)(byEx[s.exercise_id]??=[]).push(s);
  const val=subs.filter(s=>s.status==='validated'&&s.final_score!=null),avg=val.length?(val.reduce((x,s)=>x+Number(s.final_score),0)/val.length).toFixed(1):'—',chs=[...new Set(exs.map(e=>e.chapter))];
- $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><div class="student-detail-actions"><button id="reset-pass-${student.id}" class="secondary" onclick="generatePasswordReset(${student.id})">🔑 Genera codi</button><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${n!=null?esc(n)+'/10':'—'}</strong><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
+ $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><div class="student-detail-actions"><button id="reset-pass-${student.id}" class="secondary" onclick="generatePasswordReset(${student.id})">🔑 Genera codi</button><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${teacherProgressCorrectionLink(s,student.id,'detail',n!=null?esc(n)+'/10':'Corregir','history-correction-button',s.status==='returned'?'Reobre la correcció de l’intent retornat':'Reobre la correcció d’aquest intent')}</strong><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
 }
 async function teacherProgress(){
   const d=await api('/api/teacher/progress');
@@ -380,12 +380,14 @@ async function teacherProgress(){
     const dr=draftMap.get(`${student.id}:${e.id}`);
     if(s?.status==='validated' && s.final_score!=null){
       const n=Number(s.final_score);
-      return `<span class="progress-grade ${n>=5?'pass':'fail'}" title="Nota validada">${esc(s.final_score)}</span>`;
+      return teacherProgressCorrectionLink(s,student.id,'progress',esc(s.final_score),'progress-grade '+(n>=5?'pass':'fail'),'Reobre la correcció i modifica la nota');
     }
-    if(s?.status==='pending') return `<span class="progress-state pending" title="Entregada, pendent de validació">Pendent</span>`;
-    if(s?.status==='returned') return dr
-      ? `<span class="progress-state draft" title="Retornada i amb un nou esborrany">Esborrany</span>`
-      : `<span class="progress-state returned" title="Retornada perquè l'alumne la repeteixi">Retorn</span>`;
+    if(s?.status==='pending') return teacherProgressCorrectionLink(s,student.id,'progress','Pendent','progress-state pending','Obre i valida aquesta entrega');
+    if(s?.status==='returned'){
+      const label=s.returned_score==null?'↩ Retorn':'↩ '+esc(s.returned_score);
+      return teacherProgressCorrectionLink(s,student.id,'progress',label,'progress-state returned','Obre la correcció retornada i modifica la nota')+
+        (dr?'<small class="progress-draft-indicator">Esborrany nou</small>':'');
+    }
     if(dr) return `<span class="progress-state draft" title="L'alumne té un esborrany desat">Esborrany</span>`;
     return `<span class="progress-empty" title="Sense entrega">—</span>`;
   };
@@ -396,7 +398,7 @@ async function teacherProgress(){
   $('#app').innerHTML=`
     <section class="card progress-card">
       <div class="progress-toolbar">
-        <div><h1>Seguiment dels alumnes</h1><p class="muted">Darrera situació de cada tasca. Clica un alumne per veure'n la fitxa completa.</p></div>
+        <div><h1>Seguiment dels alumnes</h1><p class="muted">Darrera situació de cada tasca. Clica una nota (també una retornada) per reobrir-ne la correcció, o un alumne per veure'n l'historial.</p></div>
         <button class="secondary" onclick="teacherDashboard()">← Panell professor</button>
       </div>
       <div class="progress-legend">

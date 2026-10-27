@@ -1545,10 +1545,12 @@ pwd2 = input()
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY(user_id,exercise_id)
     )`).run();
-    const students=(await env.DB.prepare(`SELECT id,name,email FROM users WHERE role='student' ORDER BY name COLLATE NOCASE,email`).all()).results;
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS submission_feedback(submission_id INTEGER PRIMARY KEY,teacher_comment TEXT NOT NULL DEFAULT '',returned_score REAL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+   const students=(await env.DB.prepare(`SELECT id,name,email FROM users WHERE role='student' ORDER BY name COLLATE NOCASE,email`).all()).results;
     const exs=(await env.DB.prepare(`SELECT id,chapter,code,title,sort_order FROM exercises ORDER BY chapter,sort_order,id`).all()).results;
-    const subs=(await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.status,s.final_score,s.submitted_at,s.validated_at,s.ai_result_json
+    const subs=(await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.status,s.final_score,s.submitted_at,s.validated_at,s.ai_result_json,f.returned_score
       FROM submissions s
+      LEFT JOIN submission_feedback f ON f.submission_id=s.id
       JOIN (
         SELECT user_id,exercise_id,MAX(id) AS max_id
         FROM submissions GROUP BY user_id,exercise_id
