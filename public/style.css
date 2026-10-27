@@ -688,3 +688,19 @@ main{max-width:1720px}
   .integrity-event-main{grid-template-columns:1fr}
   .integrity-dismiss-btn{justify-self:start}
 }
+
+
+/* Correcció orientativa amb IA als exàmens */
+.exam-ai-banner { margin: 1rem 0; padding: .9rem 1.1rem; border: 1px solid var(--border, #cbd5e1); border-radius: 12px; }
+.exam-ai-banner p { margin: .35rem 0; }
+.exam-ai-slot { margin: .8rem 0 .4rem; }
+.exam-ai-empty { opacity: .72; font-size: .93rem; }
+.exam-ai-proposal { border: 1px solid #9aabd0; border-radius: 10px; padding: .9rem; margin: .6rem 0; }
+.exam-ai-proposal-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .6rem; }
+.exam-ai-proposal-header small { display: block; opacity: .75; margin-top: .2rem; }
+.exam-ai-proposal p { margin: .65rem 0; overflow-wrap: anywhere; }
+.exam-ai-explanation { margin-top: .7rem; }
+.exam-ai-explanation ul { margin: .5rem 0; padding-left: 1.4rem; }
+.exam-ai-explanation li { margin: .35rem 0; overflow-wrap: anywhere; }
+.exam-ai-warning { border-left: 3px solid #b97918; padding: .35rem .7rem; }
+.exam-ai-question-button { margin: .25rem 0 .6rem; }

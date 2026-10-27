@@ -231,13 +231,97 @@ async function teacherExamResults(examId){
 function integrityEventLabel(type){
   return ({copy_paste:'ALERTA DE COPY-PASTE',tab_hidden:'Canvi de pestanya/finestra',fullscreen_exit:'Sortida de pantalla completa',drop_multiline:'Bloc multilínia arrossegat',network_attempt:'Intent d’accés extern bloquejat',large_insert:'Inserció massiva de text',statement_copy:'Còpia directa de l’enunciat'})[type]||type;
 }
+// Les notes proposades per IA viuen en un estat separat de les notes editables.
+let examAiSuggestions = new Map();
+
+function examAiSuggestionHtml(proposal, questionId, maxScore) {
+  if (!proposal) return '<p class="exam-ai-empty">Encara no hi ha proposta de correcció.</p>';
+  const score=Number(proposal.score);
+  const items=Array.isArray(proposal.checks)?proposal.checks:[];
+  const strengths=Array.isArray(proposal.strengths)?proposal.strengths:[];
+  const errors=Array.isArray(proposal.errors)?proposal.errors:[];
+  const details='<details class="exam-ai-explanation"><summary>Justificació i requisits revisats</summary>'+
+    '<p>'+esc(proposal.reason||'')+'</p>'+
+    (items.length?'<ul>'+items.map(x=>'<li><strong>'+(x.fulfilled?'✓ ':'⚠ ')+esc(x.requirement||'')+'</strong>: '+esc(x.explanation||'')+'</li>').join('')+'</ul>':'')+
+    (strengths.length?'<p><strong>Encerts:</strong> '+esc(strengths.join(' · '))+'</p>':'')+
+    (errors.length?'<p><strong>Mancances:</strong> '+esc(errors.join(' · '))+'</p>':'')+'</details>';
+  return '<section class="exam-ai-proposal"><div class="exam-ai-proposal-header"><div><strong>✨ IA: '+esc(score)+' / '+esc(maxScore)+' punts</strong><small>Proposta orientativa · pendent de validació</small></div>'+
+    '<button type="button" class="secondary mini-btn" onclick="applyExamAiProposal('+Number(questionId)+')">✓ Accepta proposta</button></div>'+
+    '<p><strong>Comentari proposat:</strong> '+esc(proposal.feedback||'')+'</p>'+
+    (proposal.warning?'<p class="exam-ai-warning"><strong>Revisió necessària:</strong> '+esc(proposal.warning)+'</p>':'')+
+    details+'</section>';
+}
+
+function applyExamAiProposal(questionId) {
+  const proposal=examAiSuggestions.get(Number(questionId));
+  const card=document.querySelector('.exam-grade-question[data-question-id="'+Number(questionId)+'"]');
+  if(!proposal||!card)return;
+  const input=card.querySelector('.exam-q-score'),feedback=card.querySelector('.exam-q-feedback');
+  if(!input||input.disabled||!feedback)return;
+  const originalScore=String(input.value||'').trim(),originalFeedback=String(feedback.value||'').trim();
+  if((originalScore!==''&&Number(originalScore)!==Number(proposal.score))||
+      (originalFeedback!==''&&originalFeedback!==String(proposal.feedback||'').trim())){
+    if(!confirm('Ja hi ha una nota o comentari editat. Vols substituir-los per la proposta de la IA?'))return;
+  }
+  input.value=String(proposal.score);
+  feedback.value=String(proposal.feedback||'');
+  const note=card.querySelector('.exam-ai-applied');
+  if(note)note.textContent='✓ Proposta aplicada als camps. Revisa-la i desa la correcció per validar-la.';
+}
+
+async function aiCorrectExamQuestion(attemptId,questionId) {
+  const card=document.querySelector('.exam-grade-question[data-question-id="'+Number(questionId)+'"]');
+  const button=card?.querySelector('.exam-ai-question-button');
+  const slot=card?.querySelector('.exam-ai-slot');
+  if(!card||!button||!slot||button.disabled)return false;
+  const existing=examAiSuggestions.has(Number(questionId));
+  button.disabled=true;button.textContent='Analitzant…';
+  try{
+    const response=await api('/api/teacher/exam-attempts/'+Number(attemptId)+'/ai-grade/'+Number(questionId),{
+      method:'POST',body:JSON.stringify({force:existing})
+    });
+    const proposal=response.proposal;
+    examAiSuggestions.set(Number(questionId),proposal);
+    slot.innerHTML=examAiSuggestionHtml(proposal,Number(questionId),Number(card.dataset.maxScore));
+    return true;
+  }catch(e){
+    slot.innerHTML='<p class="error">'+esc(e.message||'Error de correcció')+'</p>';
+    return false;
+  }finally{
+    button.disabled=false;
+    button.textContent=examAiSuggestions.has(Number(questionId))?'↻ Torna a analitzar amb IA':'✨ Analitza amb IA';
+  }
+}
+
+async function aiCorrectExamAttempt(attemptId) {
+  const button=document.querySelector('#exam-ai-all-btn'),status=document.querySelector('#exam-ai-progress');
+  const cards=[...document.querySelectorAll('.exam-grade-question')];
+  const pending=cards.filter(card=>!examAiSuggestions.has(Number(card.dataset.questionId)));
+  if(!pending.length){if(status)status.textContent='Ja hi ha propostes per a tots els exercicis. Pots regenerar-les individualment.';return}
+  if(button)button.disabled=true;
+  let done=0;
+  for(const card of pending){
+    if(status)status.textContent='Analitzant exercici '+(done+1)+' de '+pending.length+'…';
+    const ok=await aiCorrectExamQuestion(attemptId,Number(card.dataset.questionId));
+    if(!ok){
+      if(status)status.textContent='Interromput: revisa el missatge de l’exercici. Les altres propostes es conserven.';
+      if(button)button.disabled=false;
+      return;
+    }
+    done++;
+  }
+  if(status)status.textContent='✓ '+done+' propostes preparades. Revisa-les, accepta-les o modifica-les abans de desar.';
+  if(button)button.disabled=false;
+}
+
 async function teacherGradeExamAttempt(id){
   try{
     const d=await api(`/api/teacher/exam-attempts/${id}`),a=d.attempt,answers=new Map((d.answers||[]).map(x=>[Number(x.question_id),x])),editable=a.status!=='in_progress';
     const events=d.events||[];
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(a.name)} · ${esc(a.exam_title)}</h1><p>${a.status==='graded'?'Examen corregit':a.status==='submitted'?'Examen lliurat':'Examen encara en curs'}</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${a.exam_id})">← Lliuraments</button></div></div>
+    examAiSuggestions=new Map((d.ai_suggestions||[]).map(p=>[Number(p.question_id),p]));
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(a.name)} · ${esc(a.exam_title)}</h1><p>${a.status==='graded'?'Examen corregit':a.status==='submitted'?'Examen lliurat':'Examen encara en curs'}</p></div><div class="teacher-actions"><button class="secondary" id="exam-ai-all-btn" onclick="aiCorrectExamAttempt(${a.id})" ${editable?"":"disabled"}>✨ Corregir amb IA</button><button class="secondary" onclick="teacherExamResults(${a.exam_id})">← Lliuraments</button></div></div>
       ${events.length?`<section class="card integrity-panel"><h2>⚠ Registre d’integritat · ${events.length} alertes</h2><p>Aquest registre és un indicador per revisar; no prova per si sol l’ús d’IA.</p>${(()=>{const total=events.filter(x=>x.event_type==='fullscreen_exit').reduce((n,ev)=>{let m={};try{m=JSON.parse(ev.meta_json||'{}')}catch{}return n+fullscreenEventDuration(ev,m,a)},0);return total>0?`<div class="fullscreen-total"><strong>⛶ Temps total fora de pantalla completa</strong><span>${esc(formatSecurityDuration(total))}</span></div>`:''})()}<div class="integrity-events">${events.map(ev=>{let meta={};try{meta=JSON.parse(ev.meta_json||'{}')}catch{}const detail=integrityEventDetail(ev,meta,a);return `<div class="${securityAlertClass(ev.event_type)}"><div class="integrity-event-main"><strong>${esc(integrityEventLabel(ev.event_type))}</strong><span>${esc(fmtDateTime(ev.created_at))}${ev.question_id?' · exercici '+esc(ev.question_id):''}</span>${detail?`<small>${esc(detail)}</small>`:''}</div><button class="secondary mini-btn integrity-dismiss-btn" onclick="dismissExamIntegrityEvent(${ev.id},${a.id})">Descarta</button></div>`}).join('')}</div></section>`:'<div class="card integrity-clean">✓ No s’han registrat alertes d’integritat.</div>'}
-      <div class="exam-grade-list">${d.questions.map((q,i)=>{const ans=answers.get(Number(q.id))||{};return `<article class="card exam-grade-question" data-question-id="${q.id}"><div class="exam-question-head"><div><span class="pill">Exercici ${i+1}</span><h2>${esc(q.title)}</h2></div><strong>${esc(q.max_score)} punts</strong></div><p>${esc(q.statement)}</p><div class="exam-code-review-head"><h4>Codi lliurat</h4><button class="secondary mini-btn" onclick="runTeacherExamAnswer(this)">▶ Executa</button></div><pre class="exam-submitted-code">${esc(ans.code||'')}</pre><div class="output teacher-exam-output" hidden></div>${ans.stdin?`<details><summary>Entrades de prova</summary><pre class="exam-submitted-stdin">${esc(ans.stdin)}</pre></details>`:''}<div class="exam-grade-controls"><label>Nota / ${esc(q.max_score)}<input class="exam-q-score" type="number" min="0" max="${esc(q.max_score)}" step="0.1" value="${esc(ans.score??'')}" ${editable?'':'disabled'}></label><label>Comentari<textarea class="exam-q-feedback" rows="3" ${editable?'':'disabled'}>${esc(ans.feedback||'')}</textarea></label></div></article>`}).join('')}</div>
+      <div class="exam-ai-banner"><strong>✨ Correcció assistida</strong><p>La IA analitza el codi sense executar-lo. Les propostes no modifiquen les notes fins que les acceptis i desis la correcció.</p><p id="exam-ai-progress" class="muted"></p></div><div class="exam-grade-list">${d.questions.map((q,i)=>{const ans=answers.get(Number(q.id))||{},proposal=examAiSuggestions.get(Number(q.id));return `<article class="card exam-grade-question" data-question-id="${q.id}" data-max-score="${esc(q.max_score)}"><div class="exam-question-head"><div><span class="pill">Exercici ${i+1}</span><h2>${esc(q.title)}</h2></div><strong>${esc(q.max_score)} punts</strong></div><p>${esc(q.statement)}</p><div class="exam-code-review-head"><h4>Codi lliurat</h4><button class="secondary mini-btn" onclick="runTeacherExamAnswer(this)">▶ Executa</button></div><pre class="exam-submitted-code">${esc(ans.code||'')}</pre><div class="output teacher-exam-output" hidden></div>${ans.stdin?`<details><summary>Entrades de prova</summary><pre class="exam-submitted-stdin">${esc(ans.stdin)}</pre></details>`:''}<div id="exam-ai-preview-${q.id}" class="exam-ai-slot">${examAiSuggestionHtml(proposal,q.id,q.max_score)}</div><button type="button" class="secondary exam-ai-question-button" onclick="aiCorrectExamQuestion(${a.id},${q.id})" ${editable?"":"disabled"}>${proposal?"↻ Torna a analitzar amb IA":"✨ Analitza amb IA"}</button><p class="exam-ai-applied muted"></p><div class="exam-grade-controls"><label>Nota / ${esc(q.max_score)}<input class="exam-q-score" type="number" min="0" max="${esc(q.max_score)}" step="0.1" value="${esc(ans.score??'')}" ${editable?'':'disabled'}></label><label>Comentari<textarea class="exam-q-feedback" rows="3" ${editable?'':'disabled'}>${esc(ans.feedback||'')}</textarea></label></div></article>`}).join('')}</div>
       <section class="card exam-final-correction"><label>Comentari general<textarea id="exam-teacher-comment" rows="4" ${editable?'':'disabled'}>${esc(a.teacher_comment||'')}</textarea></label><div class="modal-actions">${editable?`<button onclick="saveExamGrade(${a.id})">✓ Desa la correcció</button>`:'<button disabled>Encara en curs</button>'}</div></section>`;
   }catch(e){alert(e.message)}
 }
