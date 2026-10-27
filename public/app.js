@@ -260,6 +260,110 @@ async function deleteStudent(id,name){
   }catch(e){alert(`No s'ha pogut eliminar l'alumne: ${e.message}`)}
 }
 
+
+function teacherProgressCorrectionLink(submission,studentId,origin,label,cssClass,title){
+  return '<button type="button" class="progress-correction-link '+cssClass+'" title="'+esc(title||'Obre la correcció')+'" onclick="teacherOpenSubmissionCorrection('+Number(submission.id)+','+Number(studentId)+',\''+origin+'\')">'+label+'</button>';
+}
+let teacherCorrectionReturn={studentId:null,origin:'progress'},teacherCorrectionProposal=null;
+function teacherLeaveSubmissionCorrection(){
+  if(teacherCorrectionReturn.origin==='detail'&&teacherCorrectionReturn.studentId!=null)
+    return teacherStudentDetail(teacherCorrectionReturn.studentId);
+  return teacherProgress();
+}
+function teacherSubmissionAiSummary(ai){
+  if(!ai||typeof ai!=='object'||Object.keys(ai).length===0)return '<p class="muted">No hi ha cap proposta d’IA desada.</p>';
+  const hasScore=ai.score!=null&&Number.isFinite(Number(ai.score));
+  const criteria=Array.isArray(ai.criteria)?ai.criteria:[];
+  return '<div class="teacher-regrade-ai">'+
+    '<div class="teacher-regrade-ai-header"><strong>Proposta IA: '+(hasScore?esc(ai.score)+'/10':'—')+'</strong>'+
+    (hasScore?'<button type="button" class="secondary" onclick="teacherApplyCorrectionProposal()">✓ Aplica la proposta</button>':'')+'</div>'+
+    '<p>'+esc(ai.feedback||'Sense comentari')+'</p>'+
+    (criteria.length?'<ul>'+criteria.map(c=>'<li><strong>'+esc(c.name)+': '+esc(c.score)+'/'+esc(c.max)+'</strong> — '+esc(c.reason||'')+'</li>').join('')+'</ul>':'')+
+    (ai.teacher_feedback?'<p><strong>Informe per al professor:</strong> '+esc(ai.teacher_feedback)+'</p>':'')+
+    (ai.teacher_warning?'<p class="ai-warning"><strong>⚠ Revisió recomanada:</strong> '+esc(ai.teacher_warning)+'</p>':'')+'</div>';
+}
+async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progress'){
+  if(!user||user.role!=='teacher')return;
+  teacherCorrectionReturn={studentId:studentId==null?null:Number(studentId),origin:origin==='detail'?'detail':'progress'};
+  try{
+    const d=await api('/api/teacher/submissions/'+Number(id)),s=d.submission;
+    if(!s)throw Error('Entrega no trobada.');
+    let rubric=[],ai={};
+    try{rubric=JSON.parse(s.rubric_json||'[]')}catch{}
+    try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
+    teacherCorrectionProposal=ai;
+    const returned=s.status==='returned',validated=s.status==='validated',pending=!returned&&!validated;
+    const note=returned?s.returned_score:s.final_score;
+    const inputValue=note!=null?note:(pending&&ai.score!=null?ai.score:'');
+    const integrity=Array.isArray(s.integrity_events)?s.integrity_events:[];
+    $('#app').innerHTML='<div class="teacher-head teacher-regrade-header"><div>'+
+      '<h1>Revisió de la correcció</h1><p>'+esc(s.student_name)+' · '+esc(s.exercise_code)+' · '+esc(s.title)+'</p>'+
+      '<span class="status '+(returned?'returned':validated?'ok':'pending')+'">'+(returned?'↩ Retornada':validated?'✓ Validada':'Pendent')+'</span>'+
+      '</div><div class="teacher-actions"><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">← Torna al seguiment</button></div></div>'+
+      '<div class="teacher-regrade-layout"><section class="card teacher-regrade-work">'+
+      '<h2>Enunciat</h2><p class="teacher-regrade-statement">'+esc(s.statement||'')+'</p>'+
+      (Array.isArray(rubric)&&rubric.length?'<details><summary>Rúbrica</summary><ul>'+rubric.map(x=>'<li>'+esc(x[0])+': '+esc(x[1])+' punts</li>').join('')+'</ul></details>':'')+
+      (s.starter_code?'<details><summary>Codi inicial que rebia l’alumne</summary><pre>'+esc(s.starter_code)+'</pre></details>':'')+
+      '<h2>Codi lliurat</h2><pre class="teacher-regrade-code">'+esc(s.student_code||'')+'</pre>'+
+      (integrity.length?'<details class="normal-integrity-panel"><summary>⚠ Alertes d’integritat ('+integrity.length+')</summary><ul>'+integrity.map(ev=>'<li><strong>'+esc(exerciseIntegrityReason(ev))+'</strong> '+esc(exerciseIntegrityTime(ev))+'</li>').join('')+'</ul></details>':'')+
+      '</section><section class="card teacher-regrade-side"><h2>Correcció</h2>'+
+      '<p class="muted">Modifica la nota i els comentaris o demana una altra proposta a la IA. La nova anàlisi no canvia la nota del professor.</p>'+
+      '<button id="teacher-regrade-ai-btn" class="secondary" onclick="teacherRepeatCorrectionAI('+Number(s.id)+')">✨ Torna a corregir amb IA</button>'+
+      '<div id="teacher-regrade-ai-result">'+teacherSubmissionAiSummary(ai)+'</div>'+
+      '<div class="teacher-regrade-fields"><label>Nota '+(returned?'de l’intent retornat':'')+' (/10)<input id="teacher-regrade-score" type="number" step="0.1" min="0" max="10" value="'+esc(inputValue)+'"></label>'+
+      '<label>Comentari del professor<textarea id="teacher-regrade-comment" rows="6" maxlength="4000">'+esc(s.teacher_comment||'')+'</textarea></label></div>'+
+      (returned?'<p class="teacher-regrade-notice">L’intent continuarà <strong>retornat</strong> encara que canviïs la nota. L’alumne podrà repetir l’exercici.</p>':
+       pending?'<p class="teacher-regrade-notice">En desar, l’intent pendent quedarà validat.</p>':'')+
+      '<div class="teacher-regrade-actions"><button id="teacher-regrade-save" onclick="teacherSaveCorrection('+Number(s.id)+')">💾 Desa '+(returned?'la revisió':'la nota')+'</button><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">Cancel·la</button></div>'+
+      '<p id="teacher-regrade-message" role="status"></p></section></div>';
+  }catch(e){
+    $('#app').innerHTML='<div class="card"><h1>Revisió de la correcció</h1><p class="error">'+esc(e.message)+'</p><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">← Torna al seguiment</button></div>';
+  }
+}
+function teacherApplyCorrectionProposal(){
+  const ai=teacherCorrectionProposal;
+  if(!ai||ai.score==null||!Number.isFinite(Number(ai.score)))return;
+  const score=$('#teacher-regrade-score'),comment=$('#teacher-regrade-comment');
+  if(!score||!comment)return;
+  if((score.value.trim()!==''&&Number(score.value)!==Number(ai.score))||
+     (comment.value.trim()&&comment.value.trim()!==String(ai.feedback||'').trim())){
+    if(!confirm('Vols substituir la nota i el comentari dels camps per la proposta de la IA?'))return;
+  }
+  score.value=String(ai.score);comment.value=String(ai.feedback||'');
+  const msg=$('#teacher-regrade-message');
+  if(msg){msg.textContent='Proposta aplicada. Revisa-la i prem Desa per conservar els canvis.';msg.className='muted';}
+}
+async function teacherRepeatCorrectionAI(id){
+  if(!confirm('Tornar a analitzar el codi amb Workers AI? Consumirà quota gratuïta, però no canviarà la nota del professor.'))return;
+  const btn=$('#teacher-regrade-ai-btn'),msg=$('#teacher-regrade-message');
+  if(!btn||!msg)return;
+  btn.disabled=true;btn.textContent='Analitzant…';
+  msg.textContent='Analitzant el codi lliurat…';msg.className='muted';
+  try{
+    const d=await api('/api/teacher/submissions/'+Number(id)+'/regrade-ai',{method:'POST',body:'{}'});
+    teacherCorrectionProposal=d.ai;
+    const panel=$('#teacher-regrade-ai-result');
+    if(panel)panel.innerHTML=teacherSubmissionAiSummary(d.ai);
+    msg.textContent='✓ Nova proposta preparada. La nota del professor no ha canviat.';msg.className='reset-success';
+  }catch(e){msg.textContent=e.message;msg.className='error';}
+  finally{btn.disabled=false;btn.textContent='✨ Torna a corregir amb IA';}
+}
+async function teacherSaveCorrection(id){
+  const raw=String($('#teacher-regrade-score')?.value??'').trim(),comment=$('#teacher-regrade-comment')?.value||'';
+  const result=$('#teacher-regrade-message'),btn=$('#teacher-regrade-save');
+  if(!result||!btn)return;
+  if(raw!==''&&(!Number.isFinite(Number(raw))||Number(raw)<0||Number(raw)>10)){
+    result.textContent='La nota ha d’estar entre 0 i 10.';result.className='error';return;
+  }
+  btn.disabled=true;result.textContent='Desant…';result.className='muted';
+  try{
+    const d=await api('/api/teacher/submissions/'+Number(id),{method:'POST',body:JSON.stringify({action:'revise',score:raw===''?null:Number(raw),comment})});
+    const back={...teacherCorrectionReturn};
+    await teacherOpenSubmissionCorrection(id,back.studentId,back.origin);
+    const message=$('#teacher-regrade-message');
+    if(message){message.textContent=d.status==='returned'?'✓ Revisió desada. L’intent continua retornat.':'✓ Qualificació actualitzada.';message.className='reset-success';}
+  }catch(e){result.textContent=e.message;result.className='error';btn.disabled=false;}
+}
 function filterProgressChapter(){const v=$('#progress-chapter')?.value||'all';document.querySelectorAll('.progress-table [data-chapter]').forEach(x=>x.style.display=(v==='all'||x.dataset.chapter===v)?'':'none')}
 async function teacherStudentDetail(id){
  const d=await api(`/api/teacher/students/${id}/progress`),{student,exercises:exs,submissions:subs,drafts}=d,byEx={};for(const s of subs)(byEx[s.exercise_id]??=[]).push(s);
