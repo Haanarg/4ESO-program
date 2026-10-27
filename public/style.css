@@ -664,3 +664,27 @@ main{max-width:1720px}
 .security-chip.security-drop_multiline{color:#f472b6;background:rgba(244,114,182,.09)}
 .security-chip.security-network_attempt{color:#fb923c;background:rgba(251,146,60,.10)}
 .security-chip.security-large_insert{color:#a3e635;background:rgba(163,230,53,.08)}
+
+/* Descart individual d'alertes d'integritat d'examen */
+.integrity-events>div.security-alert{
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+}
+.integrity-event-main{
+  display:grid;
+  grid-template-columns:minmax(180px,.6fr) minmax(150px,.45fr) minmax(0,1fr);
+  gap:10px;
+  align-items:start;
+  min-width:0;
+}
+.integrity-event-main small{overflow-wrap:anywhere}
+.integrity-dismiss-btn{
+  align-self:center;
+  white-space:nowrap;
+  padding:6px 9px;
+}
+@media(max-width:900px){
+  .integrity-events>div.security-alert{grid-template-columns:1fr}
+  .integrity-event-main{grid-template-columns:1fr}
+  .integrity-dismiss-btn{justify-self:start}
+}
