@@ -314,9 +314,10 @@ async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progres
     const inputValue=note!=null?note:(pending&&ai.score!=null?ai.score:'');
     const integrity=Array.isArray(s.integrity_events)?s.integrity_events:[];
     $('#app').innerHTML='<div class="teacher-head teacher-regrade-header"><div>'+
-      '<h1>Revisió de la correcció</h1><p>'+esc(s.student_name)+' · '+esc(s.exercise_code)+' · '+esc(s.title)+'</p>'+
+      '<h1>Revisió de la correcció</h1><p>'+esc(s.student_name||("Alumne sense fitxa #"+s.user_id))+' · '+esc(s.exercise_code||("#"+s.exercise_id))+' · '+esc(s.title||"Exercici sense fitxa")+'</p>'+
       '<span class="status '+(returned?'returned':validated?'ok':'pending')+'">'+(returned?'↩ Retornada':validated?'✓ Validada':'Pendent')+'</span>'+
       '</div><div class="teacher-actions"><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">← Torna al seguiment</button></div></div>'+
+      (s.matched_user_id==null||s.matched_exercise_id==null?'<div class="teacher-orphan-warning">⚠ Aquest lliurament té referències incompletes a D1; el codi i la qualificació són consultables, però la fitxa d\'alumne o exercici no s\'ha reconstruït automàticament.</div>':'')+
       '<div class="teacher-regrade-layout"><section class="card teacher-regrade-work">'+
       '<h2>Enunciat</h2><p class="teacher-regrade-statement">'+esc(s.statement||'')+'</p>'+
       (Array.isArray(rubric)&&rubric.length?'<details><summary>Rúbrica</summary><ul>'+rubric.map(x=>'<li>'+esc(x[0])+': '+esc(x[1])+' punts</li>').join('')+'</ul></details>':'')+
@@ -739,6 +740,19 @@ function exerciseIntegrityChips(events){
   }).join('');
 }
 
+function teacherAuditFilters(counts){
+ const unusual=counts.other?'<button class="filter-btn" data-filter="other" onclick="filterTeacher(\'other\',this)">Altres estats <b>'+counts.other+'</b></button>':'';
+ const issues=counts.issues?'<button class="filter-btn" data-filter="issues" onclick="filterTeacher(\'issues\',this)">⚠ Incidències <b>'+counts.issues+'</b></button>':'';
+ return unusual+issues;
+}
+function teacherSubmissionAuditHtml(counts,audit,balanced,distinct,repeated,drafts,rawTotal){
+ const warning=counts.issues?'<span class="teacher-audit-warning">⚠ '+counts.issues+' registre(s) amb una fitxa d’alumne o exercici absent, o bé amb un estat desconegut. El filtre «Incidències» n’identifica els lliuraments.</span>':'';
+ const anomalies=counts.other?'<span class="teacher-audit-warning">'+counts.other+' lliurament(s) amb estats no reconeguts, separats dels pendents.</span>':'';
+ const mismatch=!balanced?'<span class="teacher-audit-warning">El recompte de la llista no concorda amb el total de D1. Cal investigar el desplegament o els registres.</span>':'';
+ return '<div class="teacher-audit card" role="status"><strong>'+(balanced?'✓ Recompte conciliat':'⚠ Diferència detectada')+'</strong>'+
+  '<span><b>'+rawTotal+'</b> lliuraments a D1 · <b>'+distinct+'</b> combinacions alumne–exercici · <b>'+repeated+'</b> reintents</span>'+
+  '<span><b>'+esc(drafts)+'</b> esborranys, no comptabilitzats com a lliuraments</span>'+warning+anomalies+mismatch+'</div>';
+}
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
@@ -757,7 +771,7 @@ async function teacherDashboard(){
     const distinct=Number.isFinite(Number(audit.distinct_student_exercises))?Number(audit.distinct_student_exercises):counts.all;
     const repeated=Math.max(0,counts.all-distinct);
     const drafts=audit.drafts_total==null?'No calculat':Number(audit.drafts_total);
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>El recompte inclou tots els intents lliurats, també els històrics. Els esborranys es compten a part.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherExams()">📝 Exàmens</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button></div><div id="teacher-list"></div>`;
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>El recompte inclou tots els intents lliurats, també els històrics. Els esborranys es compten a part.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherExams()">📝 Exàmens</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button>${teacherAuditFilters(counts)}</div>${teacherSubmissionAuditHtml(counts,audit,balanced,distinct,repeated,drafts,rawTotal)}<div id="teacher-list"></div>`;
     if(!submissions.length){ $('#teacher-list').innerHTML='<div class="card compact-empty"><p>Encara no hi ha entregues.</p></div>'; return; }
     for(const s of submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
@@ -774,14 +788,14 @@ async function teacherDashboard(){
       const integrity=Array.isArray(s.integrity_events)?s.integrity_events:[];
       $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission compact-submission ${returned?'returned-submission':''}" data-status="${status}" data-problem="${problem}">
         <div class="compact-submission-main">
-          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':pending?'pending':'returned'}">${esc(stateLabel)}</span>${integrity.length?`<span class="security-chip-row">${exerciseIntegrityChips(integrity)}</span>`:''}</div>
+          <div class="compact-id"><span class="pill">${esc(s.exercise_code||("#"+s.exercise_id))}</span><span class="status ${returned?'returned':validated?'ok':pending?'pending':'returned'}">${esc(stateLabel)}</span>${integrity.length?`<span class="security-chip-row">${exerciseIntegrityChips(integrity)}</span>`:''}</div>
           <div class="compact-student"><strong>${esc(studentName)}</strong><span>${esc(exerciseTitle)}</span></div>
           <small class="compact-date">${esc(s.submitted_at)}</small>
           <button class="statement-btn secondary" onclick="event.stopPropagation();toggleTeacherStatement(${s.id})">📋 Enunciat</button>
           <div class="score compact-score">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}<small>/10</small></div>
         </div>
         <div id="statement-${s.id}" class="teacher-statement-panel" hidden>
-          <div class="teacher-statement-head"><strong>📋 ${esc(s.exercise_code)} · Enunciat i criteris</strong><button class="secondary mini-btn" onclick="toggleTeacherStatement(${s.id})">Tanca</button></div>
+          <div class="teacher-statement-head"><strong>📋 ${esc(s.exercise_code||("#"+s.exercise_id))} · Enunciat i criteris</strong><button class="secondary mini-btn" onclick="toggleTeacherStatement(${s.id})">Tanca</button></div>
           <p>${esc(s.statement||'')}</p>
           ${(()=>{let r=[];try{r=JSON.parse(s.rubric_json||'[]')}catch{}return r.length?`<h4>Criteris d'avaluació</h4><ul>${r.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>`:''})()}
         </div>
