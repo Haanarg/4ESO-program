@@ -744,3 +744,16 @@ button.history-correction-button{border:1px solid rgba(103,232,249,.3);border-ra
 .progress-security-chip small{font-size:9px;font-weight:800;margin-left:2px}
 .history-state-and-alerts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .teacher-regrade-integrity-chips{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0;font-size:12px}
+
+
+/* Evidències de còpia i enganxada: només dins de les correccions del professor */
+.integrity-evidence{grid-column:1/-1;min-width:0;margin:7px 0 2px;border:1px solid rgba(148,163,184,.24);border-radius:9px;background:rgba(5,10,19,.45);overflow:hidden}
+.integrity-evidence>summary{cursor:pointer;font-size:12px;font-weight:750;color:#a5def1;padding:9px 12px;user-select:none}
+.integrity-evidence>summary:hover{color:#d4f6ff;background:rgba(103,232,249,.04)}
+.integrity-evidence>summary:focus-visible{outline:2px solid #67e8f9;outline-offset:-2px}
+.integrity-evidence>pre{box-sizing:border-box;margin:0;padding:12px;max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;background:#060e1a;border-top:1px solid rgba(148,163,184,.19);color:#e3edf7;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:4;user-select:text}
+.integrity-evidence>small{display:block;padding:6px 12px;color:#d4b887}
+.integrity-evidence-unavailable{display:block;color:#8b9bae;font-style:italic;font-size:11px;margin:6px 0;grid-column:1/-1}
+.normal-integrity-panel li .integrity-evidence{display:block;margin:9px 0 0}
+.normal-integrity-panel li .integrity-evidence-unavailable{margin-top:7px}
+.integrity-event-main>.integrity-evidence{width:100%}
