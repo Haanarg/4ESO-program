@@ -870,7 +870,7 @@ async function api(req,env){
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`).run();
   if(req.method==='GET'){
-   const submission=await env.DB.prepare("SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at, u.name AS student_name,e.code AS exercise_code,e.title,e.statement,e.starter_code,e.rubric_json, COALESCE(f.teacher_comment,'') AS teacher_comment,f.returned_score FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id WHERE s.id=?").bind(id).first();
+   const submission=await env.DB.prepare("SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at, u.name AS student_name,u.id AS matched_user_id,e.id AS matched_exercise_id,e.code AS exercise_code,e.title,e.statement,e.starter_code,e.rubric_json, COALESCE(f.teacher_comment,'') AS teacher_comment,f.returned_score FROM submissions s LEFT JOIN users u ON u.id=s.user_id LEFT JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id WHERE s.id=?").bind(id).first();
    await ensureExerciseIntegrityTable(env);
    const eventRows=await env.DB.prepare('SELECT event_type,meta_json,created_at FROM exercise_integrity_events WHERE submission_id=? ORDER BY id').bind(id).all();
    const integrity_events=(eventRows.results||[]).map(ev=>{
@@ -1605,7 +1605,7 @@ pwd2 = input()
  if(path==='/api/teacher/submissions' && user?.role==='teacher'){
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS submission_feedback(submission_id INTEGER PRIMARY KEY,teacher_comment TEXT NOT NULL DEFAULT '',returned_score REAL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
  await ensureExerciseIntegrityTable(env);
- const rows=await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at,u.name,e.code AS exercise_code,e.title,e.statement,e.rubric_json,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s JOIN users u ON u.id=s.user_id JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id ORDER BY s.submitted_at DESC`).all();
+ const rows=await env.DB.prepare(`SELECT s.id,s.user_id,s.exercise_id,s.code AS student_code,s.test_results_json,s.ai_result_json,s.status,s.final_score,s.submitted_at,s.validated_at,u.name,u.id AS matched_user_id,e.id AS matched_exercise_id,e.code AS exercise_code,e.title,e.statement,e.rubric_json,COALESCE(f.teacher_comment,'') teacher_comment,f.returned_score FROM submissions s LEFT JOIN users u ON u.id=s.user_id LEFT JOIN exercises e ON e.id=s.exercise_id LEFT JOIN submission_feedback f ON f.submission_id=s.id ORDER BY s.id DESC`).all();
  const ev=await env.DB.prepare(`SELECT submission_id,event_type,meta_json,created_at FROM exercise_integrity_events WHERE submission_id IS NOT NULL ORDER BY id`).all();
  const bySubmission=new Map();
  for(const x of ev.results||[]){
@@ -1615,7 +1615,20 @@ pwd2 = input()
   bySubmission.get(id).push({event_type:x.event_type,meta,created_at:x.created_at});
  }
  const submissions=(rows.results||[]).map(x=>({...x,integrity_events:bySubmission.get(Number(x.id))||[]}));
- return json({submissions})
+ // Auditoria independent del recompte de la interfície, sobre la taula original,
+ // inclosos els registres que abans eren invisibles pels INNER JOIN.
+ const databaseTotal=await env.DB.prepare('SELECT COUNT(*) AS total FROM submissions').first();
+ const statusRows=await env.DB.prepare("SELECT COALESCE(status,'') AS status,COUNT(*) AS total FROM submissions GROUP BY status").all();
+ const pairs=await env.DB.prepare("SELECT COUNT(*) AS total FROM (SELECT user_id,exercise_id FROM submissions GROUP BY user_id,exercise_id)").first();
+ let draftTotal=null;
+ try{const d=await env.DB.prepare('SELECT COUNT(*) AS total FROM drafts').first();draftTotal=Number(d?.total||0)}catch{}
+ const audit={
+  database_total:Number(databaseTotal?.total||0),
+  by_status:(statusRows.results||[]).map(x=>({status:String(x.status||''),total:Number(x.total||0)})),
+  distinct_student_exercises:Number(pairs?.total||0),
+  drafts_total:draftTotal
+ };
+ return json({submissions,audit})
 }
  if(path.startsWith('/api/teacher/submissions/') && req.method==='DELETE' && user?.role==='teacher'){
   const id=Number(path.split('/').pop());
