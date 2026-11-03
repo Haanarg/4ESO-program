@@ -76,6 +76,28 @@ async function exerciseIntegrityCountsBySubmission(env,userId=null){
  return bySubmission;
 }
 
+// Text d'evidència estrictament limitat, vinculat a la incidència original.
+// Les alertes anteriors continuen sent vàlides encara que no guardessin text.
+const INTEGRITY_EVIDENCE_MAX_CHARS=1600;
+function boundedIntegrityMeta(raw,type){
+ const source=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+ const meta={};
+ for(const key of ['lines','chars','duration_ms']){
+  if(source[key]!=null&&Number.isFinite(Number(source[key])))
+   meta[key]=Math.max(0,Math.min(10000000,Number(source[key])));
+ }
+ for(const key of ['area','left_at','at','origin','blocked','returned_at']){
+  if(source[key]!=null)meta[key]=String(source[key]).slice(0,200);
+ }
+ if(source.near_full_statement!=null)meta.near_full_statement=source.near_full_statement===true;
+ if(['copy_paste','statement_copy','drop_multiline'].includes(type)&&typeof source.text==='string'){
+  meta.text=source.text.slice(0,INTEGRITY_EVIDENCE_MAX_CHARS);
+  if(source.text_truncated===true||source.text.length>INTEGRITY_EVIDENCE_MAX_CHARS)
+   meta.text_truncated=true;
+ }
+ return meta;
+}
+
 const RESET_CODE_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function normalizeResetCode(code){return String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
 function newPasswordResetCode(){
@@ -1387,7 +1409,7 @@ async function api(req,env){
   const count=await env.DB.prepare('SELECT COUNT(*) total FROM exam_events WHERE attempt_id=?').bind(attemptId).first();
   if(Number(count?.total||0)>=500)return json({ok:true,ignored:true});
   const qid=b.question_id==null?null:Number(b.question_id);
-  const meta=JSON.stringify(b.meta&&typeof b.meta==='object'?b.meta:{}).slice(0,2000);
+  const meta=JSON.stringify(boundedIntegrityMeta(b.meta,type));
   const inserted=await env.DB.prepare('INSERT INTO exam_events(attempt_id,question_id,event_type,meta_json) VALUES(?,?,?,?) RETURNING id')
     .bind(attemptId,qid,type,meta).first();
   return json({ok:true,event_id:Number(inserted?.id||0)||null});
@@ -1491,10 +1513,10 @@ pwd2 = input()
   let b;try{b=await req.json()}catch{return json({error:'Petició no vàlida.'},400)}
   const type=String(b.event_type||'');
   if(!['statement_copy','copy_paste'].includes(type))return json({error:'Tipus d’alerta no vàlid.'},400);
-  const meta=b.meta&&typeof b.meta==='object'?b.meta:{};
+  const meta=boundedIntegrityMeta(b.meta,type);
   await ensureExerciseIntegrityTable(env);
   await env.DB.prepare(`INSERT INTO exercise_integrity_events(user_id,exercise_id,submission_id,event_type,meta_json)
-    VALUES(?,?,NULL,?,?)`).bind(user.id,exerciseId,type,JSON.stringify(meta).slice(0,2000)).run();
+    VALUES(?,?,NULL,?,?)`).bind(user.id,exerciseId,type,JSON.stringify(meta)).run();
   return json({ok:true});
  }
  if(path.startsWith('/api/exercises/') && path.endsWith('/submissions') && req.method==='POST'){
