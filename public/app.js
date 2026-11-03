@@ -322,7 +322,7 @@ async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progres
       (Array.isArray(rubric)&&rubric.length?'<details><summary>Rúbrica</summary><ul>'+rubric.map(x=>'<li>'+esc(x[0])+': '+esc(x[1])+' punts</li>').join('')+'</ul></details>':'')+
       (s.starter_code?'<details><summary>Codi inicial que rebia l’alumne</summary><pre>'+esc(s.starter_code)+'</pre></details>':'')+
       '<h2>Codi lliurat</h2><pre class="teacher-regrade-code">'+esc(s.student_code||'')+'</pre>'+
-      (integrity.length?'<div class="teacher-regrade-integrity-chips"><strong>Alertes de salvaguarda:</strong> <span class="security-chip-row">'+exerciseIntegrityChips(integrity)+'</span></div><details class="normal-integrity-panel"><summary>⚠ Alertes d’integritat ('+integrity.length+')</summary><ul>'+integrity.map(ev=>'<li><strong>'+esc(exerciseIntegrityReason(ev))+'</strong> '+esc(exerciseIntegrityTime(ev))+'</li>').join('')+'</ul></details>':'')+
+      (integrity.length?'<div class="teacher-regrade-integrity-chips"><strong>Alertes de salvaguarda:</strong> <span class="security-chip-row">'+exerciseIntegrityChips(integrity)+'</span></div><details class="normal-integrity-panel"><summary>⚠ Alertes d’integritat ('+integrity.length+')</summary><ul>'+integrity.map(ev=>'<li><strong>'+esc(exerciseIntegrityReason(ev))+'</strong> '+esc(exerciseIntegrityTime(ev))+integrityEvidenceHtml(ev.meta,ev.event_type)+'</li>').join('')+'</ul></details>':'')+
       '</section><section class="card teacher-regrade-side"><h2>Correcció</h2>'+
       '<p class="muted">Modifica la nota i els comentaris o demana una altra proposta a la IA. La nova anàlisi no canvia la nota del professor.</p>'+
       '<button id="teacher-regrade-ai-btn" class="secondary" onclick="teacherRepeatCorrectionAI('+Number(s.id)+')">✨ Torna a corregir amb IA</button>'+
@@ -551,7 +551,7 @@ async function openExercise(id){
   if(!submissionLocked){
    codeEditor.on('beforeChange',(cm,change)=>{
     if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1 && !isStudentTranslatorPaste(change.text)){
-     exerciseIntegrityEvent('copy_paste',{lines:change.text.length,chars:change.text.join('\n').length,area:'editor'});
+     exerciseIntegrityEvent('copy_paste',{lines:change.text.length,chars:change.text.join('\n').length,area:'editor',...integrityCapturedText(change.text.join('\n'))});
     }
    });
    const statement=$('#exercise-statement');
@@ -560,7 +560,8 @@ async function openExercise(id){
     if(selected.trim().length<20)return;
     exerciseIntegrityEvent('statement_copy',{
      chars:selected.length,
-     near_full_statement:selected.length>=String(current.statement||'').length*.8
+     near_full_statement:selected.length>=String(current.statement||'').length*.8,
+      ...integrityCapturedText(selected)
     });
    });
   }
@@ -692,6 +693,24 @@ function toggleTeacherStatement(id){
   if(box) box.hidden=!box.hidden;
 }
 
+// Les evidències provenen de l'acció concreta: mai es llegeix el porta-retalls global.
+function integrityCapturedText(value){
+ const text=String(value??'');
+ return {text:text.slice(0,1600),text_truncated:text.length>1600};
+}
+// Únicament visible en les pantalles de professor; tancat per defecte.
+function integrityEvidenceHtml(meta,type){
+ if(!['copy_paste','statement_copy','drop_multiline'].includes(type))return '';
+ const evidence=typeof meta?.text==='string'?meta.text:'';
+ if(!evidence)return '<small class="integrity-evidence-unavailable">Contingut no disponible: aquesta alerta es va registrar sense desar el text.</small>';
+ const verb=type==='statement_copy'?'copiat':type==='drop_multiline'?'arrossegat':'enganxat';
+ const truncated=meta.text_truncated===true;
+ return '<details class="integrity-evidence"><summary>Mostra el text '+verb+(truncated?' (fragment)':'')+'</summary>'+
+  '<pre>'+esc(evidence)+'</pre>'+
+  (truncated?'<small>Fragment retallat als primers 1.600 caràcters.</small>':'')+
+  '</details>';
+}
+
 function exerciseIntegrityReason(ev){
   const meta=ev?.meta||{};
   if(ev?.event_type==='statement_copy'){
@@ -749,7 +768,7 @@ async function teacherDashboard(){
         </div>
         <details class="compact-review">
           <summary>Corregir</summary>
-          ${integrity.length?`<div class="normal-integrity-panel"><div class="normal-integrity-title"><strong>⚠ Alertes d’integritat</strong><span>${integrity.length}</span></div><ul>${integrity.map(ev=>`<li class="${exerciseIntegrityClass(ev)}"><strong>${esc(exerciseIntegrityReason(ev))}</strong>${exerciseIntegrityTime(ev)?`<small>${esc(exerciseIntegrityTime(ev))}</small>`:''}</li>`).join('')}</ul></div>`:''}
+          ${integrity.length?`<div class="normal-integrity-panel"><div class="normal-integrity-title"><strong>⚠ Alertes d’integritat</strong><span>${integrity.length}</span></div><ul>${integrity.map(ev=>`<li class="${exerciseIntegrityClass(ev)}"><strong>${esc(exerciseIntegrityReason(ev))}</strong>${exerciseIntegrityTime(ev)?`<small>${esc(exerciseIntegrityTime(ev))}</small>`:''}${integrityEvidenceHtml(ev.meta,ev.event_type)}</li>`).join('')}</ul></div>`:''}
           <div class="compact-review-grid">
             <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
             <div class="compact-ai"><h4>Correcció IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</div>
