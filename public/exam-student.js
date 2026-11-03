@@ -135,7 +135,7 @@ function examGlobalPasteHandler(e){
   if(target?.closest?.('.CodeMirror') || target?.closest?.('.student-translator')) return;
   const text=e.clipboardData?.getData('text/plain')||'';
   if(/\r?\n/.test(text)){
-    examIntegrityEvent('copy_paste',{lines:text.split(/\r?\n/).length,chars:text.length,area:target?.id||target?.tagName||'unknown'});
+    examIntegrityEvent('copy_paste',{lines:text.split(/\r?\n/).length,chars:text.length,area:target?.id||target?.tagName||'unknown',...integrityCapturedText(text)});
   }
 }
 function bindExamIntegrity(){
@@ -251,7 +251,7 @@ function renderExamQuestion(){
   codeEditor.on('beforeChange',(cm,change)=>{
     const chars=Array.isArray(change.text)?change.text.join('\n').length:0;
     if(change.origin==='paste' && Array.isArray(change.text) && change.text.length>1 && !isStudentTranslatorPaste(change.text)){
-      examIntegrityEvent('copy_paste',{lines:change.text.length,chars,area:'editor'});
+      examIntegrityEvent('copy_paste',{lines:change.text.length,chars,area:'editor',...integrityCapturedText(change.text.join('\n'))});
     }else if(!['setValue','paste','undo','redo'].includes(change.origin) && chars>=120){
       examIntegrityEvent('large_insert',{chars,origin:change.origin||'unknown'});
     }
@@ -260,7 +260,7 @@ function renderExamQuestion(){
   wrap.addEventListener('drop',e=>{
     const t=e.dataTransfer?.getData('text/plain')||'';
     if(/\r?\n/.test(t)){
-      examIntegrityEvent('drop_multiline',{lines:t.split(/\r?\n/).length,chars:t.length});
+      examIntegrityEvent('drop_multiline',{lines:t.split(/\r?\n/).length,chars:t.length,...integrityCapturedText(t)});
     }
   });
   $('#stdin').addEventListener('input',scheduleExamSave);
@@ -270,7 +270,8 @@ function renderExamQuestion(){
     if(selected.trim().length<20)return;
     examIntegrityEvent('statement_copy',{
       chars:selected.length,
-      near_full_statement:selected.length>=String(q.statement||'').length*.8
+      near_full_statement:selected.length>=String(q.statement||'').length*.8,
+      ...integrityCapturedText(selected)
     });
   });
   setTimeout(()=>codeEditor.refresh(),0);
