@@ -757,3 +757,15 @@ button.history-correction-button{border:1px solid rgba(103,232,249,.3);border-ra
 .normal-integrity-panel li .integrity-evidence{display:block;margin:9px 0 0}
 .normal-integrity-panel li .integrity-evidence-unavailable{margin-top:7px}
 .integrity-event-main>.integrity-evidence{width:100%}
+
+
+/* Auditoria del recompte del gestor: sense ocultar lliuraments amb referències perdudes */
+.teacher-audit{margin:0 0 13px!important;padding:10px 13px!important;display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;background:rgba(23,37,54,.65)!important;border-color:#2b435e!important;font-size:12px;color:#b7c9da}
+.teacher-audit>strong{color:#a5ebc4;font-size:13px}
+.teacher-audit span{display:inline-block}
+.teacher-audit span b{color:#e7f0fa}
+.teacher-audit-warning{color:#ffd69b;border-left:2px solid #e9ab45;padding-left:9px}
+.teacher-orphan-warning{font-size:12px;color:#ffdbac;background:rgba(197,120,41,.09);border:1px solid rgba(249,183,92,.3);padding:9px 12px;margin:8px 12px 12px;border-radius:9px}
+.teacher-regrade-header+.teacher-orphan-warning{margin:0 0 14px}
+.compact-submission[data-problem="true"]{border-left:3px solid #e9ab45!important}
+@media(max-width:650px){.teacher-audit{display:block}.teacher-audit>span{display:block;margin-top:6px}}
