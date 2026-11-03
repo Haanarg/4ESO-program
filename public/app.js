@@ -681,7 +681,7 @@ function filterTeacher(status,btn){
   teacherFilter=status;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.filter===status));
   document.querySelectorAll('#teacher-list .submission').forEach(card=>{
-    card.hidden=status!=='all' && card.dataset.status!==status;
+    card.hidden=status==='issues'?card.dataset.problem!=='true':(status!=='all' && card.dataset.status!==status);
   });
   const visible=[...document.querySelectorAll('#teacher-list .submission')].filter(x=>!x.hidden).length;
   const empty=$('#teacher-filter-empty');
@@ -742,21 +742,40 @@ function exerciseIntegrityChips(events){
 async function teacherDashboard(){
   try{
     const d=await api('/api/teacher/submissions');
-    const counts={all:d.submissions.length,pending:0,returned:0,validated:0};
-    d.submissions.forEach(s=>counts[s.status==='returned'?'returned':s.status==='validated'?'validated':'pending']++);
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>Revisa les entregues pendents. Quan les validis o retornis, desapareixeran d'aquesta vista.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherExams()">📝 Exàmens</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button></div><div id="teacher-list"></div>`;
-    if(!d.submissions.length){ $('#teacher-list').innerHTML='<div class="card compact-empty"><p>Encara no hi ha entregues.</p></div>'; return; }
-    for(const s of d.submissions){
+    const submissions=Array.isArray(d.submissions)?d.submissions:[];
+    const isProblem=s=>s.matched_user_id==null||s.matched_exercise_id==null||
+      !['pending','returned','validated'].includes(String(s.status||''));
+    const counts={all:submissions.length,pending:0,returned:0,validated:0,other:0,issues:0};
+    for(const s of submissions){
+      const category=['pending','returned','validated'].includes(String(s.status))?s.status:'other';
+      counts[category]++;
+      if(isProblem(s))counts.issues++;
+    }
+    const audit=d.audit||{};
+    const rawTotal=Number.isFinite(Number(audit.database_total))?Number(audit.database_total):counts.all;
+    const balanced=counts.pending+counts.returned+counts.validated+counts.other===counts.all && counts.all===rawTotal;
+    const distinct=Number.isFinite(Number(audit.distinct_student_exercises))?Number(audit.distinct_student_exercises):counts.all;
+    const repeated=Math.max(0,counts.all-distinct);
+    const drafts=audit.drafts_total==null?'No calculat':Number(audit.drafts_total);
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>El recompte inclou tots els intents lliurats, també els històrics. Els esborranys es compten a part.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherExams()">📝 Exàmens</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button></div><div id="teacher-list"></div>`;
+    if(!submissions.length){ $('#teacher-list').innerHTML='<div class="card compact-empty"><p>Encara no hi ha entregues.</p></div>'; return; }
+    for(const s of submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
-      const validated=s.status==='validated',returned=s.status==='returned';
-      const status=returned?'returned':validated?'validated':'pending';
-      const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':'Pendent';
+      const validated=s.status==='validated',returned=s.status==='returned',pending=s.status==='pending';
+      const status=returned?'returned':validated?'validated':pending?'pending':'other';
+      const stateLabel=returned?'↩ Retornada':validated?'✓ Validada':pending?'Pendent':'Estat: '+String(s.status??'sense estat');
+      const noStudent=s.matched_user_id==null,noExercise=s.matched_exercise_id==null,problem=isProblem(s);
+      const studentName=s.name||('Alumne sense fitxa (#'+s.user_id+')');
+      const exerciseTitle=s.title||('Exercici sense fitxa (#'+s.exercise_id+')');
+      const explanation=[noStudent?'Falta la fitxa de l’alumne #'+s.user_id:null,
+                         noExercise?'Falta la fitxa de l’exercici #'+s.exercise_id:null,
+                         status==='other'?'Estat no reconegut: '+String(s.status??'NULL'):null].filter(Boolean);
       const proposed=s.final_score!=null?s.final_score:(s.returned_score!=null?s.returned_score:(ai.score??''));
       const integrity=Array.isArray(s.integrity_events)?s.integrity_events:[];
-      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission compact-submission ${returned?'returned-submission':''}" data-status="${status}">
+      $('#teacher-list').insertAdjacentHTML('beforeend',`<article class="card submission compact-submission ${returned?'returned-submission':''}" data-status="${status}" data-problem="${problem}">
         <div class="compact-submission-main">
-          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':'pending'}">${stateLabel}</span>${integrity.length?`<span class="security-chip-row">${exerciseIntegrityChips(integrity)}</span>`:''}</div>
-          <div class="compact-student"><strong>${esc(s.name)}</strong><span>${esc(s.title)}</span></div>
+          <div class="compact-id"><span class="pill">${esc(s.exercise_code)}</span><span class="status ${returned?'returned':validated?'ok':pending?'pending':'returned'}">${esc(stateLabel)}</span>${integrity.length?`<span class="security-chip-row">${exerciseIntegrityChips(integrity)}</span>`:''}</div>
+          <div class="compact-student"><strong>${esc(studentName)}</strong><span>${esc(exerciseTitle)}</span></div>
           <small class="compact-date">${esc(s.submitted_at)}</small>
           <button class="statement-btn secondary" onclick="event.stopPropagation();toggleTeacherStatement(${s.id})">📋 Enunciat</button>
           <div class="score compact-score">${returned?'—':s.final_score!=null?esc(s.final_score):ai.score!=null?esc(Number(ai.score).toFixed(1)):'—'}<small>/10</small></div>
@@ -768,6 +787,7 @@ async function teacherDashboard(){
         </div>
         <details class="compact-review">
           <summary>Corregir</summary>
+          ${explanation.length?`<p class="teacher-orphan-warning">⚠ ${esc(explanation.join(" · "))}. El codi lliurat continua desat a D1; no s’han reconstruït les fitxes eliminades.</p>`:''}
           ${integrity.length?`<div class="normal-integrity-panel"><div class="normal-integrity-title"><strong>⚠ Alertes d’integritat</strong><span>${integrity.length}</span></div><ul>${integrity.map(ev=>`<li class="${exerciseIntegrityClass(ev)}"><strong>${esc(exerciseIntegrityReason(ev))}</strong>${exerciseIntegrityTime(ev)?`<small>${esc(exerciseIntegrityTime(ev))}</small>`:''}${integrityEvidenceHtml(ev.meta,ev.event_type)}</li>`).join('')}</ul></div>`:''}
           <div class="compact-review-grid">
             <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
@@ -776,7 +796,7 @@ async function teacherDashboard(){
           <div class="compact-correction-bar">
             <label class="compact-comment"><span>Comentari</span><textarea id="comment-${s.id}" placeholder="Comentari opcional per a l'alumne" ${returned?'disabled':''}>${esc(s.teacher_comment||'')}</textarea></label>
             <label class="compact-grade"><span>Nota</span><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(proposed)}" ${validated||returned?'disabled':''}></label>
-            <div class="compact-actions"><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'✓ Validar'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retornar</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑</button>`}</div>
+            <div class="compact-actions"><button onclick="teacherOpenSubmissionCorrection(${s.id})" class="secondary">✎ Reobre correcció</button><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'✓ Validar'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retornar</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑</button>`}</div>
           </div>
         </details>
       </article>`);
