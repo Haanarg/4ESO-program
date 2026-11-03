@@ -283,6 +283,7 @@ function teacherProgressCorrectionLink(submission,studentId,origin,label,cssClas
 }
 let teacherCorrectionReturn={studentId:null,origin:'progress'},teacherCorrectionProposal=null;
 function teacherLeaveSubmissionCorrection(){
+  if(teacherCorrectionReturn.origin==='dashboard')return teacherDashboard();
   if(teacherCorrectionReturn.origin==='detail'&&teacherCorrectionReturn.studentId!=null)
     return teacherStudentDetail(teacherCorrectionReturn.studentId);
   return teacherProgress();
@@ -301,7 +302,7 @@ function teacherSubmissionAiSummary(ai){
 }
 async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progress'){
   if(!user||user.role!=='teacher')return;
-  teacherCorrectionReturn={studentId:studentId==null?null:Number(studentId),origin:origin==='detail'?'detail':'progress'};
+  teacherCorrectionReturn={studentId:studentId==null?null:Number(studentId),origin:['detail','dashboard'].includes(origin)?origin:'progress'};
   try{
     const d=await api('/api/teacher/submissions/'+Number(id)),s=d.submission;
     if(!s)throw Error('Entrega no trobada.');
@@ -309,14 +310,14 @@ async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progres
     try{rubric=JSON.parse(s.rubric_json||'[]')}catch{}
     try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
     teacherCorrectionProposal=ai;
-    const returned=s.status==='returned',validated=s.status==='validated',pending=!returned&&!validated;
+    const returned=s.status==='returned',validated=s.status==='validated',pending=s.status==='pending';
     const note=returned?s.returned_score:s.final_score;
     const inputValue=note!=null?note:(pending&&ai.score!=null?ai.score:'');
     const integrity=Array.isArray(s.integrity_events)?s.integrity_events:[];
     $('#app').innerHTML='<div class="teacher-head teacher-regrade-header"><div>'+
       '<h1>Revisió de la correcció</h1><p>'+esc(s.student_name||("Alumne sense fitxa #"+s.user_id))+' · '+esc(s.exercise_code||("#"+s.exercise_id))+' · '+esc(s.title||"Exercici sense fitxa")+'</p>'+
-      '<span class="status '+(returned?'returned':validated?'ok':'pending')+'">'+(returned?'↩ Retornada':validated?'✓ Validada':'Pendent')+'</span>'+
-      '</div><div class="teacher-actions"><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">← Torna al seguiment</button></div></div>'+
+      '<span class="status '+(returned?'returned':validated?'ok':pending?'pending':'returned')+'">'+(returned?'↩ Retornada':validated?'✓ Validada':pending?'Pendent':'Estat desconegut: '+esc(s.status??'NULL'))+'</span>'+
+      '</div><div class="teacher-actions"><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">← Torna al '+(teacherCorrectionReturn.origin==='dashboard'?'gestor':'seguiment')+'</button></div></div>'+
       (s.matched_user_id==null||s.matched_exercise_id==null?'<div class="teacher-orphan-warning">⚠ Aquest lliurament té referències incompletes a D1; el codi i la qualificació són consultables, però la fitxa d\'alumne o exercici no s\'ha reconstruït automàticament.</div>':'')+
       '<div class="teacher-regrade-layout"><section class="card teacher-regrade-work">'+
       '<h2>Enunciat</h2><p class="teacher-regrade-statement">'+esc(s.statement||'')+'</p>'+
@@ -335,7 +336,7 @@ async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progres
       '<div class="teacher-regrade-actions"><button id="teacher-regrade-save" onclick="teacherSaveCorrection('+Number(s.id)+')">💾 Desa '+(returned?'la revisió':'la nota')+'</button><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">Cancel·la</button></div>'+
       '<p id="teacher-regrade-message" role="status"></p></section></div>';
   }catch(e){
-    $('#app').innerHTML='<div class="card"><h1>Revisió de la correcció</h1><p class="error">'+esc(e.message)+'</p><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">← Torna al seguiment</button></div>';
+    $('#app').innerHTML='<div class="card"><h1>Revisió de la correcció</h1><p class="error">'+esc(e.message)+'</p><button class="secondary" onclick="teacherLeaveSubmissionCorrection()">← Torna al '+(teacherCorrectionReturn.origin==='dashboard'?'gestor':'seguiment')+'</button></div>';
   }
 }
 function teacherApplyCorrectionProposal(){
@@ -746,7 +747,7 @@ function teacherAuditFilters(counts){
  return unusual+issues;
 }
 function teacherSubmissionAuditHtml(counts,audit,balanced,distinct,repeated,drafts,rawTotal){
- const warning=counts.issues?'<span class="teacher-audit-warning">⚠ '+counts.issues+' registre(s) amb una fitxa d’alumne o exercici absent, o bé amb un estat desconegut. El filtre «Incidències» n’identifica els lliuraments.</span>':'';
+ const warning=counts.issues?'<span class="teacher-audit-warning">⚠ '+counts.issues+' registre(s) amb una fitxa d’alumne o exercici absent, o bé amb un estat desconegut. El filtre «Incidències» n’identifica els lliuraments; aquests registres ja estan inclosos als comptadors d’estat.</span>':'';
  const anomalies=counts.other?'<span class="teacher-audit-warning">'+counts.other+' lliurament(s) amb estats no reconeguts, separats dels pendents.</span>':'';
  const mismatch=!balanced?'<span class="teacher-audit-warning">El recompte de la llista no concorda amb el total de D1. Cal investigar el desplegament o els registres.</span>':'';
  return '<div class="teacher-audit card" role="status"><strong>'+(balanced?'✓ Recompte conciliat':'⚠ Diferència detectada')+'</strong>'+
@@ -810,7 +811,7 @@ async function teacherDashboard(){
           <div class="compact-correction-bar">
             <label class="compact-comment"><span>Comentari</span><textarea id="comment-${s.id}" placeholder="Comentari opcional per a l'alumne" ${returned?'disabled':''}>${esc(s.teacher_comment||'')}</textarea></label>
             <label class="compact-grade"><span>Nota</span><input id="score-${s.id}" type="number" min="0" max="10" step="0.1" value="${esc(proposed)}" ${validated||returned?'disabled':''}></label>
-            <div class="compact-actions"><button onclick="teacherOpenSubmissionCorrection(${s.id})" class="secondary">✎ Reobre correcció</button><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'✓ Validar'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retornar</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑</button>`}</div>
+            <div class="compact-actions"><button onclick="teacherOpenSubmissionCorrection(${s.id},null,'dashboard')" class="secondary">✎ Reobre correcció</button><button onclick="validateSubmission(${s.id})" ${validated||returned?'disabled':''}>${validated?'✓ Validada':returned?'Retornada':'✓ Validar'}</button>${returned?'':`<button class="return-btn" onclick="returnSubmission(${s.id})">↩ Retornar</button><button class="danger delete-btn" onclick="deleteSubmission(${s.id})">🗑</button>`}</div>
           </div>
         </details>
       </article>`);
