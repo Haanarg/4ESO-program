@@ -18,6 +18,7 @@ function examTopicOptions(){
 }
 
 async function teacherExams(){
+  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   try{
     const d=await api('/api/teacher/exams'),items=d.exams||[];
     $('#app').innerHTML=`<div class="teacher-head"><div><h1>Exàmens de programació</h1><p>Crea, programa, obre, tanca i corregeix exàmens des d’un sol lloc.</p></div><div class="teacher-actions"><button onclick="teacherNewExam()">＋ Nou examen</button><button class="secondary" onclick="teacherDashboard()">← Panell professor</button></div></div>
@@ -39,6 +40,7 @@ async function teacherCreateExam(){
   }catch(e){msg.textContent=e.message;msg.className='error'}
 }
 async function teacherEditExam(id){
+  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   try{
     const d=await api(`/api/teacher/exams/${id}`),e=d.exam,qs=d.questions||[],locked=Number(e.attempt_count||0)>0;
     $('#app').innerHTML=`<div class="teacher-head"><div><span class="status ${e.effective_state==='active'?'exam-live':e.effective_state==='closed'?'returned':'draft'}">${esc(examStateLabel(e.effective_state))}</span><h1>${esc(e.title)}</h1><p>${locked?'L’examen ja té intents: els exercicis queden bloquejats per preservar els lliuraments.':'Configura l’examen i els seus exercicis.'}</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${e.id})">📋 Lliuraments</button><button class="secondary" onclick="teacherExams()">← Exàmens</button></div></div>
@@ -222,6 +224,7 @@ function integrityEventDetail(ev,meta,attempt){
   return '';
 }
 async function teacherExamResults(examId){
+  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   try{
     const d=await api(`/api/teacher/exams/${examId}/results`),e=d.exam,ats=d.attempts||[];
     $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(e.title)} · Lliuraments</h1><p>${ats.length} intents registrats.</p></div><div class="teacher-actions"><button class="secondary" onclick="teacherExamResults(${e.id})">↻ Actualitza</button><button class="secondary" onclick="teacherEditExam(${e.id})">⚙ Configura</button><button class="secondary" onclick="teacherExams()">← Exàmens</button></div></div>
