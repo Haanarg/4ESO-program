@@ -395,7 +395,7 @@ main{max-width:1720px}
   .compact-score{grid-column:3!important;grid-row:1!important}
 }
 
-/* Entrades d'input() visibles abans d'executar Python */
+/* Entrades preparades opcionals per compatibilitat i proves */
 .program-input-panel{
   background:rgba(12,23,38,.70);
   border:1px solid #29425b;
