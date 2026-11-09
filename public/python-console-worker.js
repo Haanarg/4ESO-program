@@ -1,67 +1,78 @@
-/* Executor Python aïllat. Es carrega dins un Worker creat per un iframe sandbox. */
+/* Execució Python interactiva compatible amb navegadors sense JSPI.
+ * A cada resposta reexecutem de manera determinista el programa amb
+ * l'historial d'entrades. El procés viu en un Worker d'iframe sandbox.
+ */
 (function(){
  const CDN='https://cdn.jsdelivr.net/pyodide/v0.28.2/full/';
- let engine=null, running=false, pending=null;
+ const MAX_INPUTS=250, MAX_OUTPUT=120000, MAX_CODE=30000;
+ let engine=null, running=false, session=null;
  const emit=(type,detail={})=>self.postMessage({type,...detail});
- self.__console_out=text=>emit('output',{text:String(text).slice(0,15000)});
- self.__console_input=prompt=>new Promise((resolve,reject)=>{
-   if(pending){reject(Error('Ja hi ha una entrada pendent.'));return;}
-   pending={resolve,reject};
-   emit('input',{prompt:String(prompt).slice(0,500)});
- });
- self.onmessage=async e=>{
-   const msg=e.data||{};
-   if(msg.type==='answer'&&pending){
-     const request=pending;pending=null;
-     request.resolve(String(msg.value??'').slice(0,3000));
-     return;
+ function pythonWrapper(code,inputs,seed){
+  return [
+   'import builtins, contextlib, io, random, traceback',
+   '__run_out = io.StringIO()',
+   '__run_inputs = iter('+JSON.stringify(inputs)+')',
+   '__run_seed = '+seed,
+   'random.seed(__run_seed)',
+   'class __RunNeedsInput(BaseException):',
+   ' def __init__(self,prompt): self.prompt=str(prompt)',
+   'def __run_input(prompt=""):',
+   ' try: value=next(__run_inputs)',
+   ' except StopIteration: raise __RunNeedsInput(prompt)',
+   ' print(str(prompt)+str(value))',
+   ' return value',
+   '__run_old_input=builtins.input',
+   '__run_prompt=None',
+   '__run_error=None',
+   'builtins.input=__run_input',
+   'try:',
+   ' with contextlib.redirect_stdout(__run_out), contextlib.redirect_stderr(__run_out):',
+   '  exec(compile('+JSON.stringify(code)+',"<alumne>","exec"),{"__name__":"__main__"})',
+   'except __RunNeedsInput as request:',
+   ' __run_prompt=request.prompt',
+   'except BaseException:',
+   ' __run_error=traceback.format_exc(limit=6)',
+   'finally:',
+   ' builtins.input=__run_old_input',
+   '(__run_out.getvalue(),__run_prompt,__run_error)'
+  ].join('\n');
+ }
+ async function replay(){
+  if(!session||running)return;
+  const current=session;
+  running=true;
+  try{
+   emit('loading',{message:engine?'Executant el programa…':'Carregant Python…'});
+   if(!engine){
+    importScripts(CDN+'pyodide.js');
+    engine=await loadPyodide({indexURL:CDN});
    }
-   if(msg.type!=='start'||running)return;
-   running=true;
-   try{
-     emit('loading');
-     if(!engine){
-       importScripts(CDN+'pyodide.js');
-       engine=await loadPyodide({indexURL:CDN});
-     }
-     const source=String(msg.code||'').slice(0,30000);
-     const prepared=msg.mode==='prepared';
-     const values=Array.isArray(msg.values)?msg.values.map(x=>String(x).slice(0,3000)).slice(0,1000):[];
-     const script=`import builtins, sys, traceback
-from pyodide.ffi import run_sync, can_run_sync
-from js import __console_out, __console_input
-if ${!prepared?'True':'False'} and not can_run_sync():
-    raise RuntimeError("INTERACTIVE_JSPI_UNAVAILABLE")
-_values = iter(${JSON.stringify(values)})
-class _ConsoleOutput:
-    def write(self, text):
-        value = str(text)
-        if value: __console_out(value)
-        return len(value)
-    def flush(self): pass
-_old_input, _old_out, _old_err = builtins.input, sys.stdout, sys.stderr
-def _ask(prompt=""):
-    if ${prepared?'True':'False'}:
-        try: value = next(_values)
-        except StopIteration: raise EOFError('Falten entrades al programa.')
-        __console_out(str(prompt) + value + '\\n')
-        return value
-    return str(run_sync(__console_input(str(prompt))))
-builtins.input = _ask
-sys.stdout = sys.stderr = _ConsoleOutput()
-try:
-    exec(compile(${JSON.stringify(source)}, "<alumne>", "exec"), {"__name__": "__main__"})
-except BaseException:
-    traceback.print_exc(limit=6)
-finally:
-    builtins.input, sys.stdout, sys.stderr = _old_input, _old_out, _old_err
-`;
-     if(/\bmatplotlib\b/.test(source))await engine.loadPackage('matplotlib');
-     await engine.runPythonAsync(script);
-     emit('done');
-   }catch(error){
-     const message=String(error?.message||error||'Error desconegut');
-     emit(message.includes('INTERACTIVE_JSPI_UNAVAILABLE')?'unsupported':'error',{message:message.slice(0,1200)});
-   }finally{running=false}
+   if(/\bmatplotlib\b/.test(current.code))await engine.loadPackage('matplotlib');
+   let result=await engine.runPythonAsync(pythonWrapper(current.code,current.answers,current.seed));
+   const output=String(result[0]??''),prompt=result[1],error=result[2];
+   if(typeof result.destroy==='function')result.destroy();
+   emit('replace',{text:output.slice(0,MAX_OUTPUT)+(output.length>MAX_OUTPUT?'\n… (sortida limitada)':'')});
+   if(error){
+    session=null;emit('error',{message:String(error).slice(0,2200)});
+   }else if(prompt!==null&&prompt!==undefined){
+    if(current.answers.length>=MAX_INPUTS){session=null;emit('error',{message:'S’ha arribat al límit de 250 respostes. Reinicia el programa.'});}
+    else emit('input',{prompt:String(prompt).slice(0,500)});
+   }else{session=null;emit('done');}
+  }catch(error){
+   session=null;emit('error',{message:String(error?.message||error||'No s’ha pogut iniciar Python.').slice(0,2200)});
+  }finally{running=false;}
+ }
+ self.onmessage=e=>{
+  const msg=e.data||{};
+  if(msg.type==='start' && !running){
+   const code=String(msg.code||'').slice(0,MAX_CODE);
+   const inputs=msg.mode==='prepared'&&Array.isArray(msg.values)?msg.values.map(x=>String(x).slice(0,3000)).slice(0,MAX_INPUTS):[];
+   session={code,answers:inputs,seed:Math.floor(Math.random()*2147483647)};
+   replay();return;
+  }
+  if(msg.type==='answer' && !running && session && session.answers.length<MAX_INPUTS){
+   session.answers.push(String(msg.value??'').slice(0,3000));
+   replay();
+  }
  };
 })();
