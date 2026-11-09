@@ -237,6 +237,24 @@ function cookie(req){return req.headers.get('Cookie')?.match(/session=([^;]+)/)?
 async function auth(req,env){const t=cookie(req); if(!t)return null; const th=await sha256(t); const row=await env.DB.prepare('SELECT u.id,u.name,u.email,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(th,new Date().toISOString()).first(); return row||null;}
 async function session(user,env){const raw=crypto.randomUUID()+'-'+crypto.randomUUID(); const th=await sha256(raw); const exp=new Date(Date.now()+1000*60*60*24*14).toISOString(); await env.DB.prepare('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(th,user.id,exp).run(); return new Response(JSON.stringify({user}),{headers:{'content-type':'application/json','Set-Cookie':`session=${raw}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1209600`}})}
 
+let adventureGallerySchemaPromise=null;
+async function ensureAdventureGalleryTable(env){
+ if(!adventureGallerySchemaPromise){
+  adventureGallerySchemaPromise=(async()=>{
+   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS adventure_gallery(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    submission_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`).run();
+   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_adventure_gallery_submission ON adventure_gallery(submission_id)').run();
+  })().catch(err=>{adventureGallerySchemaPromise=null;throw err});
+ }
+ return adventureGallerySchemaPromise;
+}
 const seedExercises = [
  {chapter:1,code:'1.1',title:'Predir i executar',type:'predict',statement:'Estudia el codi i afegeix comentaris amb la teva predicció. Utilitza els termes executar, sortida i cadena de text. Respon també les preguntes d’investigació dins del codi.',starter:`# Exemple de codi\n\nprint("Hola Món!")\n\n# La Meva Predicció - substitueix aquest comentari per la teva predicció.\n\n##### Tasca d'Investigació\n# Quina part del codi és l'ordre de sortida (output)?\n# Resposta:\n\n# Quina part del codi és la cadena (string)?\n# Resposta:\n\n# Quina seria la sortida de print("I love Computing")?\n# Resposta:\n\n# Què passaria amb print("I love Comping")?\n# Resposta:\n\n# Què passaria amb print("I love Computing"?\n# Resposta:`,solution:`# El codi mostrarà la cadena Hola Món! a la consola.\nprint("Hola Món!")\n# print és l'ordre de sortida i "Hola Món!" és la cadena de text.`,rubric:[['Predicció i explicació',4],['Preguntes d’investigació',4],['Sintaxi/comentaris',2]],tests:[]},
  {chapter:1,code:'1.2',title:'Modificar',type:'modify',statement:'Adapta el codi perquè mostri el teu propi missatge. Afegeix comentaris per mostrar què fa.',starter:`print("Hello World!")\n`,solution:`# La instrucció print mostra text a la sortida.\nprint("I love computer science!")`,rubric:[['Funcionament',5],['Ús de print i cadena',3],['Comentaris',2]],tests:[{kind:'stdout',expected:'CUSTOM',points:5},{kind:'has','pattern':'print','points':2},{kind:'comment','points':1}]},
@@ -1443,6 +1461,62 @@ async function api(req,env){
   const at=new Date().toISOString();
   await env.DB.prepare(`UPDATE exam_attempts SET status='submitted',submitted_at=? WHERE id=? AND status='in_progress'`).bind(at,attemptId).run();
   return json({ok:true,submitted_at:at});
+ }
+ // La galeria 11.5 publica només el codi validat de la tasca 11.4.
+ if(path==='/api/adventures' && req.method==='GET'){
+  if(!user)return json({error:'Cal iniciar sessió.'},401);
+  await ensureAdventureGalleryTable(env);
+  const list=await env.DB.prepare(`SELECT a.id,a.user_id,a.title,a.description,a.published_at,a.updated_at,u.name AS author
+   FROM adventure_gallery a JOIN users u ON u.id=a.user_id
+   JOIN submissions s ON s.id=a.submission_id AND s.user_id=a.user_id AND s.status='validated'
+   JOIN exercises e ON e.id=s.exercise_id AND e.code='11.4'
+   ORDER BY a.updated_at DESC,a.id DESC LIMIT 200`).all();
+  let can_publish=false;
+  if(user.role==='student'){
+   const approved=await env.DB.prepare(`SELECT s.id FROM submissions s JOIN exercises e ON e.id=s.exercise_id
+    WHERE s.user_id=? AND e.code='11.4' AND s.status='validated' ORDER BY s.id DESC LIMIT 1`).bind(user.id).first();
+   can_publish=!!approved;
+  }
+  return json({adventures:list.results||[],can_publish,user_id:user.id});
+ }
+ if(path==='/api/adventures' && req.method==='POST'){
+  if(user?.role!=='student')return json({error:'Només els alumnes poden publicar aventures.'},403);
+  await ensureAdventureGalleryTable(env);
+  let b;try{b=await req.json()}catch{return json({error:'Dades incorrectes.'},400)}
+  const title=String(b.title||'').trim(),description=String(b.description||'').trim();
+  if(title.length<2||title.length>80)return json({error:'El títol ha de tenir entre 2 i 80 caràcters.'},400);
+  if(description.length>350)return json({error:'La descripció és massa llarga (màxim 350 caràcters).'},400);
+  const approved=await env.DB.prepare(`SELECT s.id FROM submissions s JOIN exercises e ON e.id=s.exercise_id
+   WHERE s.user_id=? AND e.code='11.4' AND s.status='validated'
+   ORDER BY s.id DESC LIMIT 1`).bind(user.id).first();
+  if(!approved)return json({error:'Cal tenir l’exercici 11.4 validat pel professor per publicar.'},403);
+  await env.DB.prepare(`INSERT INTO adventure_gallery(user_id,submission_id,title,description)
+    VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id,title=excluded.title,
+       description=excluded.description,updated_at=CURRENT_TIMESTAMP`)
+   .bind(user.id,approved.id,title,description).run();
+  return json({ok:true});
+ }
+ const adventureDetail=path.match(/^\/api\/adventures\/(\d+)$/);
+ if(adventureDetail && req.method==='GET'){
+  if(!user)return json({error:'Cal iniciar sessió.'},401);
+  await ensureAdventureGalleryTable(env);
+  const id=Number(adventureDetail[1]);
+  const game=await env.DB.prepare(`SELECT a.id,a.title,a.description,a.published_at,u.name AS author,s.code
+   FROM adventure_gallery a JOIN users u ON u.id=a.user_id
+   JOIN submissions s ON s.id=a.submission_id AND s.user_id=a.user_id AND s.status='validated'
+   JOIN exercises e ON e.id=s.exercise_id AND e.code='11.4' WHERE a.id=?`).bind(id).first();
+  return game?json({adventure:game}):json({error:'Aquesta aventura no està publicada o ja no està validada.'},404);
+ }
+ if(adventureDetail && req.method==='DELETE'){
+  if(!user)return json({error:'Cal iniciar sessió.'},401);
+  await ensureAdventureGalleryTable(env);
+  const id=Number(adventureDetail[1]);
+  const entry=await env.DB.prepare('SELECT user_id FROM adventure_gallery WHERE id=?').bind(id).first();
+  if(!entry)return json({error:'Aventura no trobada.'},404);
+  if(user.role!=='teacher'&&Number(entry.user_id)!==Number(user.id))
+   return json({error:'No pots retirar aquesta aventura.'},403);
+  await env.DB.prepare('DELETE FROM adventure_gallery WHERE id=?').bind(id).run();
+  return json({ok:true});
  }
  if(path==='/api/exercises'){const rows=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json FROM exercises ORDER BY chapter,sort_order').all(); return json({exercises:rows.results.map(e=>({...e,starter_code:starterForExercise(e)}))})}
  if(/^\/api\/exercises\/\d+\/draft$/.test(path) && req.method==='GET'){
