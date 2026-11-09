@@ -99,7 +99,8 @@ const PythonConsole=(()=>{
   });
   batchButton.addEventListener('click',()=>{
    if(active!==session)return;
-   const values=batch.value.replace(/\r\n?/g,'\n').replace(/\n$/,'').split('\n');
+   const raw=batch.value.replace(/\r\n?/g,'\n').replace(/\n$/,'');
+   const values=raw===''?[]:raw.split('\n');
    fallback.hidden=true;output.textContent='';session.outputLength=0;
    status.textContent='Executant amb entrades preparades…';
    sendMessage({type:'prepared',values});
