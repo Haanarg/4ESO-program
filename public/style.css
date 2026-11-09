@@ -848,3 +848,40 @@ button.history-correction-button{border:1px solid rgba(103,232,249,.3);border-ra
  #exercise-layout .exercise-output-card{padding:16px}
  #exercise-layout .exercise-output-card .resizable-output{height:220px}
 }
+
+/* Revisió i correcció docent: executor interactiu sense alterar els lliuraments. */
+.teacher-run-panel{min-width:0}
+.teacher-run-head{
+ display:flex;align-items:center;justify-content:space-between;
+ flex-wrap:wrap;gap:8px 14px;margin:0 0 10px
+}
+.teacher-run-head h2,.teacher-run-head h4{margin:0}
+.teacher-run-button{white-space:nowrap;flex:none}
+.teacher-run-output[hidden]{display:none!important}
+.teacher-run-output{
+ box-sizing:border-box;width:100%;height:280px;min-height:170px!important;
+ max-height:none!important;resize:vertical!important;
+ overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable;
+ margin:14px 0 12px;border:1px solid #315671!important;
+ background:#030b14!important;
+}
+.teacher-run-output:has(.python-console){
+ background:#030b14!important;border:1px solid #315671!important;
+ padding:0!important;overflow:auto!important;max-height:none!important;
+ resize:vertical!important
+}
+.teacher-run-output .python-console{
+ display:flex;flex-direction:column;min-height:100%;height:100%;
+ overflow:hidden;border:0;border-radius:0
+}
+.teacher-run-output .python-console-log{
+ flex:1 1 auto;min-height:0!important;max-height:none!important;
+ overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable
+}
+.compact-code .teacher-run-output .python-console-log{
+ min-height:0!important;max-height:none!important;resize:none
+}
+.teacher-regrade-run-panel{margin:18px 0 4px}
+.teacher-regrade-run-panel .teacher-run-output{margin-top:12px}
+.exam-grade-question .teacher-run-output{margin-top:12px}
+.teacher-run-output .python-console-input{flex-shrink:0}
