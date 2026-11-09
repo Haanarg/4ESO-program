@@ -1,5 +1,6 @@
 /* Pont amb iframe sandbox d'origen opac: cap accés a cookies ni DOM del curs. */
 (function(){
+ const FRAME_VERSION='20261109-r3';
  let child=null,session=null;
  const send=(type,data={})=>parent.postMessage({pythonConsole:true,id:session,type,...data},'*');
  window.addEventListener('message',event=>{
@@ -24,5 +25,5 @@
      : {type:'answer',value:msg.value});
   }
  });
- send('ready');
+ send('ready',{version:FRAME_VERSION});
 })();
