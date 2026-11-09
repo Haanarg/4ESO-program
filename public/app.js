@@ -282,7 +282,25 @@ function teacherProgressCorrectionLink(submission,studentId,origin,label,cssClas
   return '<button type="button" class="progress-correction-link '+cssClass+'" title="'+esc(title||'Obre la correcció')+'" onclick="teacherOpenSubmissionCorrection('+Number(submission.id)+','+Number(studentId)+',\''+origin+'\')">'+label+'</button>';
 }
 let teacherCorrectionReturn={studentId:null,origin:'progress'},teacherCorrectionProposal=null;
+
+// Executor de lectura per als lliuraments: mai desa codi, inputs ni qualificacions.
+// Comparteix la consola aïllada de Pyodide que utilitzen els alumnes.
+function runTeacherSubmittedCode(button){
+ if(user?.role!=='teacher')return;
+ const panel=button?.closest('.teacher-run-panel');
+ const source=panel?.querySelector('.teacher-run-source');
+ const output=panel?.querySelector('.teacher-run-output');
+ if(!source||!output)return;
+ output.hidden=false;
+ if(typeof PythonConsole==='undefined'){
+  output.textContent='No s’ha pogut carregar la consola Python. Actualitza la pàgina i torna-ho a provar.';
+  return;
+ }
+ PythonConsole.run(source.textContent||'',output);
+}
+
 function teacherLeaveSubmissionCorrection(){
+  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   if(teacherCorrectionReturn.origin==='dashboard')return teacherDashboard();
   if(teacherCorrectionReturn.origin==='detail'&&teacherCorrectionReturn.studentId!=null)
     return teacherStudentDetail(teacherCorrectionReturn.studentId);
@@ -302,6 +320,7 @@ function teacherSubmissionAiSummary(ai){
 }
 async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progress'){
   if(!user||user.role!=='teacher')return;
+  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   teacherCorrectionReturn={studentId:studentId==null?null:Number(studentId),origin:['detail','dashboard'].includes(origin)?origin:'progress'};
   try{
     const d=await api('/api/teacher/submissions/'+Number(id)),s=d.submission;
@@ -323,7 +342,7 @@ async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progres
       '<h2>Enunciat</h2><p class="teacher-regrade-statement">'+esc(s.statement||'')+'</p>'+
       (Array.isArray(rubric)&&rubric.length?'<details><summary>Rúbrica</summary><ul>'+rubric.map(x=>'<li>'+esc(x[0])+': '+esc(x[1])+' punts</li>').join('')+'</ul></details>':'')+
       (s.starter_code?'<details><summary>Codi inicial que rebia l’alumne</summary><pre>'+esc(s.starter_code)+'</pre></details>':'')+
-      '<h2>Codi lliurat</h2><pre class="teacher-regrade-code">'+esc(s.student_code||'')+'</pre>'+
+      '<div class="teacher-run-panel teacher-regrade-run-panel"><div class="teacher-run-head"><h2>Codi lliurat</h2><button type="button" class="secondary teacher-run-button" onclick="runTeacherSubmittedCode(this)">▶ Executar</button></div><pre class="teacher-regrade-code teacher-run-source">'+esc(s.student_code||'')+'</pre><div class="teacher-run-output output" hidden role="region" aria-label="Sortida del codi de l’alumne"></div></div>'+
       (integrity.length?'<div class="teacher-regrade-integrity-chips"><strong>Alertes de salvaguarda:</strong> <span class="security-chip-row">'+exerciseIntegrityChips(integrity)+'</span></div><details class="normal-integrity-panel"><summary>⚠ Alertes d’integritat ('+integrity.length+')</summary><ul>'+integrity.map(ev=>'<li><strong>'+esc(exerciseIntegrityReason(ev))+'</strong> '+esc(exerciseIntegrityTime(ev))+integrityEvidenceHtml(ev.meta,ev.event_type)+'</li>').join('')+'</ul></details>':'')+
       '</section><section class="card teacher-regrade-side"><h2>Correcció</h2>'+
       '<p class="muted">Modifica la nota i els comentaris o demana una altra proposta a la IA. La nova anàlisi no canvia la nota del professor.</p>'+
@@ -806,7 +825,7 @@ async function teacherDashboard(){
           ${explanation.length?`<p class="teacher-orphan-warning">⚠ ${esc(explanation.join(" · "))}. El codi lliurat continua desat a D1; no s’han reconstruït les fitxes eliminades.</p>`:''}
           ${integrity.length?`<div class="normal-integrity-panel"><div class="normal-integrity-title"><strong>⚠ Alertes d’integritat</strong><span>${integrity.length}</span></div><ul>${integrity.map(ev=>`<li class="${exerciseIntegrityClass(ev)}"><strong>${esc(exerciseIntegrityReason(ev))}</strong>${exerciseIntegrityTime(ev)?`<small>${esc(exerciseIntegrityTime(ev))}</small>`:''}${integrityEvidenceHtml(ev.meta,ev.event_type)}</li>`).join('')}</ul></div>`:''}
           <div class="compact-review-grid">
-            <div class="compact-code"><h4>Codi entregat</h4><pre>${esc(s.student_code)}</pre></div>
+            <div class="compact-code teacher-run-panel"><div class="teacher-run-head"><h4>Codi entregat</h4><button type="button" class="secondary teacher-run-button" onclick="runTeacherSubmittedCode(this)">▶ Executar</button></div><pre class="teacher-run-source">${esc(s.student_code||'')}</pre><div class="teacher-run-output output" hidden role="region" aria-label="Sortida del codi de l’alumne"></div></div>
             <div class="compact-ai"><h4>Correcció IA</h4><p>${esc(ai.feedback||'Sense proposta IA')}</p>${Array.isArray(ai.criteria)&&ai.criteria.length?`<div class="teacher-criteria">${ai.criteria.map(c=>`<p><strong>${esc(c.name)}: ${esc(c.score)}/${esc(c.max)}</strong> — ${esc(c.reason||'')}</p>`).join('')}</div>`:''}${ai.teacher_feedback?`<h4>Informe per al professor</h4><p>${esc(ai.teacher_feedback)}</p>`:''}${ai.teacher_warning?`<div class="ai-warning"><strong>⚠ Revisió recomanada:</strong> ${esc(ai.teacher_warning)}</div>`:''}</div>
           </div>
           <div class="compact-correction-bar">
