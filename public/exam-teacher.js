@@ -315,13 +315,14 @@ async function aiCorrectExamAttempt(attemptId) {
 }
 
 async function teacherGradeExamAttempt(id){
+  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   try{
     const d=await api(`/api/teacher/exam-attempts/${id}`),a=d.attempt,answers=new Map((d.answers||[]).map(x=>[Number(x.question_id),x])),editable=a.status!=='in_progress';
     const events=d.events||[];
     examAiSuggestions=new Map((d.ai_suggestions||[]).map(p=>[Number(p.question_id),p]));
     $('#app').innerHTML=`<div class="teacher-head"><div><h1>${esc(a.name)} · ${esc(a.exam_title)}</h1><p>${a.status==='graded'?'Examen corregit':a.status==='submitted'?'Examen lliurat':'Examen encara en curs'}</p></div><div class="teacher-actions"><button class="secondary" id="exam-ai-all-btn" onclick="aiCorrectExamAttempt(${a.id})" ${editable?"":"disabled"}>✨ Corregir amb IA</button><button class="secondary" onclick="teacherExamResults(${a.exam_id})">← Lliuraments</button></div></div>
       ${events.length?`<section class="card integrity-panel"><h2>⚠ Registre d’integritat · ${events.length} alertes</h2><p>Aquest registre és un indicador per revisar; no prova per si sol l’ús d’IA.</p>${(()=>{const total=events.filter(x=>x.event_type==='fullscreen_exit').reduce((n,ev)=>{let m={};try{m=JSON.parse(ev.meta_json||'{}')}catch{}return n+fullscreenEventDuration(ev,m,a)},0);return total>0?`<div class="fullscreen-total"><strong>⛶ Temps total fora de pantalla completa</strong><span>${esc(formatSecurityDuration(total))}</span></div>`:''})()}<div class="integrity-events">${events.map(ev=>{let meta={};try{meta=JSON.parse(ev.meta_json||'{}')}catch{}const detail=integrityEventDetail(ev,meta,a);return `<div class="${securityAlertClass(ev.event_type)}"><div class="integrity-event-main"><strong>${esc(integrityEventLabel(ev.event_type))}</strong><span>${esc(fmtDateTime(ev.created_at))}${ev.question_id?' · exercici '+esc(ev.question_id):''}</span>${detail?`<small>${esc(detail)}</small>`:''}${integrityEvidenceHtml(meta,ev.event_type)}</div><button class="secondary mini-btn integrity-dismiss-btn" onclick="dismissExamIntegrityEvent(${ev.id},${a.id})">Descarta</button></div>`}).join('')}</div></section>`:'<div class="card integrity-clean">✓ No s’han registrat alertes d’integritat.</div>'}
-      <div class="exam-ai-banner"><strong>✨ Correcció assistida</strong><p>La IA analitza el codi sense executar-lo. Les propostes no modifiquen les notes fins que les acceptis i desis la correcció.</p><p id="exam-ai-progress" class="muted"></p></div><div class="exam-grade-list">${d.questions.map((q,i)=>{const ans=answers.get(Number(q.id))||{},proposal=examAiSuggestions.get(Number(q.id));return `<article class="card exam-grade-question" data-question-id="${q.id}" data-max-score="${esc(q.max_score)}"><div class="exam-question-head"><div><span class="pill">Exercici ${i+1}</span><h2>${esc(q.title)}</h2></div><strong>${esc(q.max_score)} punts</strong></div><p>${esc(q.statement)}</p><div class="exam-code-review-head"><h4>Codi lliurat</h4><button class="secondary mini-btn" onclick="runTeacherExamAnswer(this)">▶ Executa</button></div><pre class="exam-submitted-code">${esc(ans.code||'')}</pre><div class="output teacher-exam-output" hidden></div>${ans.stdin?`<details><summary>Entrades de prova</summary><pre class="exam-submitted-stdin">${esc(ans.stdin)}</pre></details>`:''}<div id="exam-ai-preview-${q.id}" class="exam-ai-slot">${examAiSuggestionHtml(proposal,q.id,q.max_score)}</div><button type="button" class="secondary exam-ai-question-button" onclick="aiCorrectExamQuestion(${a.id},${q.id})" ${editable?"":"disabled"}>${proposal?"↻ Torna a analitzar amb IA":"✨ Analitza amb IA"}</button><p class="exam-ai-applied muted"></p><div class="exam-grade-controls"><label>Nota / ${esc(q.max_score)}<input class="exam-q-score" type="number" min="0" max="${esc(q.max_score)}" step="0.1" value="${esc(ans.score??'')}" ${editable?'':'disabled'}></label><label>Comentari<textarea class="exam-q-feedback" rows="3" ${editable?'':'disabled'}>${esc(ans.feedback||'')}</textarea></label></div></article>`}).join('')}</div>
+      <div class="exam-ai-banner"><strong>✨ Correcció assistida</strong><p>La IA analitza el codi sense executar-lo. Les propostes no modifiquen les notes fins que les acceptis i desis la correcció.</p><p id="exam-ai-progress" class="muted"></p></div><div class="exam-grade-list">${d.questions.map((q,i)=>{const ans=answers.get(Number(q.id))||{},proposal=examAiSuggestions.get(Number(q.id));return `<article class="card exam-grade-question teacher-run-panel" data-question-id="${q.id}" data-max-score="${esc(q.max_score)}"><div class="exam-question-head"><div><span class="pill">Exercici ${i+1}</span><h2>${esc(q.title)}</h2></div><strong>${esc(q.max_score)} punts</strong></div><p>${esc(q.statement)}</p><div class="exam-code-review-head"><h4>Codi lliurat</h4><button class="secondary mini-btn" onclick="runTeacherSubmittedCode(this)">▶ Executar</button></div><pre class="exam-submitted-code teacher-run-source">${esc(ans.code||'')}</pre><div class="output teacher-exam-output teacher-run-output" hidden role="region" aria-label="Sortida del codi de l’alumne"></div>${ans.stdin?`<details><summary>Entrades de prova</summary><pre class="exam-submitted-stdin">${esc(ans.stdin)}</pre></details>`:''}<div id="exam-ai-preview-${q.id}" class="exam-ai-slot">${examAiSuggestionHtml(proposal,q.id,q.max_score)}</div><button type="button" class="secondary exam-ai-question-button" onclick="aiCorrectExamQuestion(${a.id},${q.id})" ${editable?"":"disabled"}>${proposal?"↻ Torna a analitzar amb IA":"✨ Analitza amb IA"}</button><p class="exam-ai-applied muted"></p><div class="exam-grade-controls"><label>Nota / ${esc(q.max_score)}<input class="exam-q-score" type="number" min="0" max="${esc(q.max_score)}" step="0.1" value="${esc(ans.score??'')}" ${editable?'':'disabled'}></label><label>Comentari<textarea class="exam-q-feedback" rows="3" ${editable?'':'disabled'}>${esc(ans.feedback||'')}</textarea></label></div></article>`}).join('')}</div>
       <section class="card exam-final-correction"><label>Comentari general<textarea id="exam-teacher-comment" rows="4" ${editable?'':'disabled'}>${esc(a.teacher_comment||'')}</textarea></label><div class="modal-actions">${editable?`<button onclick="saveExamGrade(${a.id})">✓ Desa la correcció</button>`:'<button disabled>Encara en curs</button>'}</div></section>`;
   }catch(e){alert(e.message)}
 }
@@ -332,23 +333,6 @@ async function dismissExamIntegrityEvent(eventId,attemptId){
   }catch(e){alert(e.message)}
 }
 
-async function runTeacherExamAnswer(button){
-  const card=button.closest('.exam-grade-question');
-  const output=card?.querySelector('.teacher-exam-output');
-  if(!card||!output)return;
-  const code=card.querySelector('.exam-submitted-code')?.textContent||'';
-  const raw=card.querySelector('.exam-submitted-stdin')?.textContent||'';
-  const inputs=raw===''?[]:raw.replace(/\r\n?/g,'\n').replace(/\n$/,'').split('\n');
-  output.hidden=false;output.textContent='Executant…';
-  button.disabled=true;
-  try{
-    const p=await loadPy();
-    if(/matplotlib/.test(code)){output.textContent='Carregant matplotlib…';await p.loadPackage('matplotlib')}
-    const result=await p.runPythonAsync(pythonWrapper(code,inputs,true));
-    output.textContent=String(result[0]||'')+(result[1]?('\n'+result[1]):'');
-  }catch(e){output.textContent=e.message||String(e)}
-  finally{button.disabled=false}
-}
 async function saveExamGrade(attemptId){
   const cards=[...document.querySelectorAll('.exam-grade-question')];
   const scores=[];
