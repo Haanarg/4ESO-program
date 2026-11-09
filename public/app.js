@@ -485,6 +485,7 @@ function renderTheory(md){
   flushTable();closeLists();if(inCode)h+=`<pre class="theory-code"><code>${esc(code.join('\n'))}</code></pre>`;return h;
 }
 function openTheory(chapter){
+ if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
  const names={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Aventura de text: entrades, bucles i funcions',12:'Personal Database'};
  const md=COURSE_THEORY?.[chapter]||COURSE_THEORY?.[String(chapter)]||'';
@@ -493,6 +494,7 @@ function openTheory(chapter){
 }
 function openFirstExercise(chapter){if(typeof examMode!=='undefined'&&examMode){if(typeof renderExamQuestion==='function'&&examSession)renderExamQuestion();return}const e=exercises.find(x=>x.chapter===chapter);if(e)openExercise(e.id);else dashboard()}
 async function dashboard(){
+ if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  if(typeof examCleanup==='function' && typeof examMode!=='undefined' && examMode) examCleanup();
  let examItems=[];
  if(!studentPreview && user?.role==='student'){
@@ -514,6 +516,7 @@ async function dashboard(){
   $('#list').insertAdjacentHTML('beforeend',`<h2 class="chapter-title"><span>${symbol} Capítol ${chapter}: ${esc(chapterNames[chapter])}</span><small>${cd}/${ce.length}</small></h2>`);
   $('#list').insertAdjacentHTML('beforeend',`<div class="card theory-card" onclick="openTheory(${chapter})"><div class="theory-card-icon">📖</div><div><span class="pill theory-pill">TEORIA</span><h3>Teoria · ${esc(chapterNames[chapter])}</h3><p>Conceptes, explicacions i exemples del curs original abans de començar els exercicis.</p></div><span class="theory-arrow">→</span></div>`);
   ce.forEach(x=>{const sub=last[x.id];const status=sub?.status==='returned'?'<span class="status returned">↩ Retornada</span>':sub?.final_score!=null?`<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`:sub?.ai_result_json?'<span class="status pending">Pendent de validació</span>':drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'';const note=sub?.teacher_comment?`<div class="dashboard-teacher-note">💬 ${esc(sub.teacher_comment)}</div>`:'';$('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${x.id})"><span class="pill">${esc(x.type)}</span><h3>${esc(x.code)} · ${esc(x.title)}</h3><p>${esc(x.statement.slice(0,220))}${x.statement.length>220?'…':''}</p>${status}${note}</div>`);});
+   if(chapter===11)$('#list').insertAdjacentHTML('beforeend','<div class="card exercise gallery-course-card" onclick="openAdventureGallery()"><span class="pill">GALERIA</span><h3>11.5 · Galeria d’aventures</h3><p>Juga als projectes del grup i publica la teva aventura quan el professor hagi validat l’11.4.</p><span class="status draft">▶ Explora la galeria</span></div>');
  }
 }
 function exerciseIntegrityEvent(eventType,meta={}){
@@ -531,6 +534,7 @@ async function flushExerciseIntegrity(){
 }
 
 async function openExercise(id){
+ if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
  exerciseIntegrityPending=[];
  if(draftTimer){clearTimeout(draftTimer);draftTimer=null} current=await api(`/api/exercises/${id}`);
@@ -545,7 +549,7 @@ async function openExercise(id){
  const legacySolved94=current.code==='9.4' && savedDraft?.code?.length===1068 && savedDraft.code.startsWith('#Define four functions - add, subtract, multiply, divide') && savedDraft.code.endsWith('print(outputNum)');
  const editorCode=isReturned ? latestSubmission.code : (legacySolved94?current.starter_code:(savedDraft?.code??current.starter_code));
  const returnedFeedback=isReturned?`<div class="returned-feedback"><div><span class="status returned">↩ Retornada</span><h3>Comentaris del professor</h3></div><p>${latestSubmission.teacher_comment?esc(latestSubmission.teacher_comment):'El professor ha retornat aquesta tasca perquè la puguis revisar i tornar a enviar.'}</p>${latestSubmission.returned_score!=null?`<small>Nota de l'intent retornat: ${esc(latestSubmission.returned_score)}/10</small>`:''}</div>`:'';
- $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p id="exercise-statement" class="statement">${esc(current.statement)}</p>${studentTranslatorHtml()}<h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div><textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><div class="program-input-panel"><label for="stdin">⌨ Entrades del programa (<code>input()</code>)</label><p>Escriu aquí les respostes <strong>abans de prémer Executar</strong>, una per línia i en el mateix ordre que les demana el programa.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false" placeholder="Exemple:&#10;Gaspar&#10;15"></textarea></div><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div><div class="output-heading"><h3>Sortida</h3><small>La pots redimensionar verticalment</small></div><div id="output" class="output resizable-output"></div><div id="grade"></div></section></div>`;
+ $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p id="exercise-statement" class="statement">${esc(current.statement)}</p>${studentTranslatorHtml()}<h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div><textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><details class="program-input-panel program-input-advanced"><summary>🧪 Entrades preparades (opcional)</summary><p>Normalment respondràs directament a la consola. Per provar programes antics, també pots escriure les respostes aquí (una per línia) i executar-les juntes.</p><textarea id="stdin" class="stdin" rows="3" spellcheck="false" placeholder="Exemple:&#10;Gaspar&#10;15"></textarea><button type="button" class="secondary mini-btn" onclick="runCodePrepared()">▶ Executa amb entrades preparades</button></details><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div><div class="output-heading"><h3>Sortida</h3><small>La pots redimensionar verticalment</small></div><div id="output" class="output resizable-output"></div><div id="grade"></div></section></div>`;
  codeEditor=CodeMirror.fromTextArea($('#code'),{mode:{name:'python',version:3,singleLineStringErrors:false},lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,lineWrapping:false,viewportMargin:Infinity,autofocus:true,extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}});
  codeEditor.setSize('100%','clamp(540px,70vh,860px)');
  if(!studentPreview){
@@ -600,12 +604,18 @@ function pythonWrapper(code, inputs, showInput=false){
 }
 
 async function runCode(){
-  try{
-    const p=await loadPy(); const code=codeEditor?codeEditor.getValue():$('#code').value;
-    if(/matplotlib/.test(code)) { $('#output').textContent='Carregant matplotlib…'; await p.loadPackage('matplotlib'); }
-    const out=await p.runPythonAsync(pythonWrapper(code,inputValues(),true));
-    $('#output').textContent=out[0]+(out[1]?`\n${out[1]}`:'');
-  }catch(e){ $('#output').textContent=e.message; }
+ const code=codeEditor?codeEditor.getValue():$('#code')?.value||'';
+ if(typeof PythonConsole!=='undefined')PythonConsole.run(code,$('#output'));
+ else await runCodePrepared();
+}
+async function runCodePrepared(){
+ if(typeof PythonConsole!=='undefined')PythonConsole.stop();
+ try{
+  const p=await loadPy(),code=codeEditor?codeEditor.getValue():$('#code').value;
+  if(/matplotlib/.test(code)){ $('#output').textContent='Carregant matplotlib…'; await p.loadPackage('matplotlib'); }
+  const out=await p.runPythonAsync(pythonWrapper(code,inputValues(),true));
+  $('#output').textContent=out[0]+(out[1]?`\n${out[1]}`:'');
+ }catch(e){ $('#output').textContent=e.message; }
 }
 
 async function executeForTest(p,code,inputs=[]){
@@ -643,6 +653,7 @@ async function localTests(code){
   return results;
 }
 async function submitCode(){
+ if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   if(studentPreview){
     $('#grade').innerHTML='<p class="preview-note">Aquesta és una vista prèvia del professor. Les entregues estan desactivades.</p>';
     return;
@@ -755,6 +766,7 @@ function teacherSubmissionAuditHtml(counts,audit,balanced,distinct,repeated,draf
   '<span><b>'+esc(drafts)+'</b> esborranys, no comptabilitzats com a lliuraments</span>'+warning+anomalies+mismatch+'</div>';
 }
 async function teacherDashboard(){
+ if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   try{
     const d=await api('/api/teacher/submissions');
     const submissions=Array.isArray(d.submissions)?d.submissions:[];
@@ -772,7 +784,7 @@ async function teacherDashboard(){
     const distinct=Number.isFinite(Number(audit.distinct_student_exercises))?Number(audit.distinct_student_exercises):counts.all;
     const repeated=Math.max(0,counts.all-distinct);
     const drafts=audit.drafts_total==null?'No calculat':Number(audit.drafts_total);
-    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>El recompte inclou tots els intents lliurats, també els històrics. Els esborranys es compten a part.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherExams()">📝 Exàmens</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button>${teacherAuditFilters(counts)}</div>${teacherSubmissionAuditHtml(counts,audit,balanced,distinct,repeated,drafts,rawTotal)}<div id="teacher-list"></div>`;
+    $('#app').innerHTML=`<div class="teacher-head"><div><h1>Panell del professor</h1><p>El recompte inclou tots els intents lliurats, també els històrics. Els esborranys es compten a part.</p></div><div class="teacher-actions"><button class="secondary" onclick="enterStudentPreview()">👁 Veure com a alumne</button> <button class="secondary" onclick="teacherProgress()">📊 Seguiment alumnes</button><button class="secondary" onclick="teacherExams()">📝 Exàmens</button><button class="secondary" onclick="openAdventureGallery()">🎮 Galeria 11.5</button><button class="secondary" onclick="teacherDashboard()">↻ Actualitzar</button></div></div><div class="teacher-filters"><button class="filter-btn" data-filter="pending" onclick="filterTeacher('pending',this)">Pendents <b>${counts.pending}</b></button><button class="filter-btn" data-filter="returned" onclick="filterTeacher('returned',this)">Retornades <b>${counts.returned}</b></button><button class="filter-btn" data-filter="validated" onclick="filterTeacher('validated',this)">Validades <b>${counts.validated}</b></button><button class="filter-btn" data-filter="all" onclick="filterTeacher('all',this)">Totes <b>${counts.all}</b></button>${teacherAuditFilters(counts)}</div>${teacherSubmissionAuditHtml(counts,audit,balanced,distinct,repeated,drafts,rawTotal)}<div id="teacher-list"></div>`;
     if(!submissions.length){ $('#teacher-list').innerHTML='<div class="card compact-empty"><p>Encara no hi ha entregues.</p></div>'; return; }
     for(const s of submissions){
       let ai={}; try{ai=JSON.parse(s.ai_result_json||'{}')}catch{}
