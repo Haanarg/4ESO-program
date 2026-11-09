@@ -25,11 +25,14 @@
        engine=await loadPyodide({indexURL:CDN});
      }
      const source=String(msg.code||'').slice(0,30000);
+     const prepared=msg.mode==='prepared';
+     const values=Array.isArray(msg.values)?msg.values.map(x=>String(x).slice(0,3000)).slice(0,1000):[];
      const script=`import builtins, sys, traceback
 from pyodide.ffi import run_sync, can_run_sync
 from js import __console_out, __console_input
-if not can_run_sync():
+if ${!prepared?'True':'False'} and not can_run_sync():
     raise RuntimeError("INTERACTIVE_JSPI_UNAVAILABLE")
+_values = iter(${JSON.stringify(values)})
 class _ConsoleOutput:
     def write(self, text):
         value = str(text)
@@ -38,6 +41,11 @@ class _ConsoleOutput:
     def flush(self): pass
 _old_input, _old_out, _old_err = builtins.input, sys.stdout, sys.stderr
 def _ask(prompt=""):
+    if ${prepared?'True':'False'}:
+        try: value = next(_values)
+        except StopIteration: raise EOFError('Falten entrades al programa.')
+        __console_out(str(prompt) + value + '\n')
+        return value
     return str(run_sync(__console_input(str(prompt))))
 builtins.input = _ask
 sys.stdout = sys.stderr = _ConsoleOutput()
