@@ -772,10 +772,6 @@ button.history-correction-button{border:1px solid rgba(103,232,249,.3);border-ra
 
 
 /* Consola Python amb entrades en directe, compartida per tot el curs */
-.program-input-advanced{padding:10px 13px!important;margin-top:12px!important}
-.program-input-advanced>summary{cursor:pointer;font-size:12px;color:#a3d8e9;font-weight:750}
-.program-input-advanced .stdin{margin:9px 0!important}
-.program-input-advanced button{margin-top:7px}
 .python-console{background:#030b14;border:1px solid #27435d;border-radius:11px;overflow:hidden;margin:0;min-width:0;color:#bdeff7}
 .python-console-head{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#0b1b2c;padding:7px 11px;font-size:12px;color:#a6bfd5}
 .python-console-head button{font-size:11px;padding:5px 10px}
@@ -810,3 +806,48 @@ button.history-correction-button{border:1px solid rgba(103,232,249,.3);border-ra
 .gallery-terminal{min-height:280px!important;max-height:none!important;resize:vertical!important}
 .gallery-play-head{max-width:1100px}
 @media(max-width:670px){.python-console-input{display:block}.python-console-input label{display:block}.python-console-input input{width:100%;margin:7px 0}.gallery-publish{padding:14px!important}}
+
+/* Editor d'exercicis: pastilla de codi i pastilla de consola independents. */
+#exercise-layout{padding-bottom:clamp(44px,7vh,110px)}
+#exercise-layout>.python-flow{
+ display:flex;flex-direction:column;align-self:start;gap:18px;min-width:0;
+}
+#exercise-layout .python-flow>.card{margin:0;min-width:0}
+#exercise-layout .python-flow>.python-workspace{
+ border-color:rgba(103,232,249,.28);
+ box-shadow:0 20px 60px rgba(0,0,0,.28),0 0 0 1px rgba(103,232,249,.04);
+}
+#exercise-layout .python-workspace .editor-actions{margin:18px 0 0}
+#exercise-layout .exercise-output-card{
+ padding:20px 24px;min-width:0;
+ border-color:rgba(94,230,168,.24);
+ background:linear-gradient(180deg,rgba(15,30,42,.98),rgba(10,20,34,.97));
+}
+#exercise-layout .exercise-output-card .output-heading{
+ margin:0 0 13px;display:flex;gap:9px 18px;align-items:baseline;flex-wrap:wrap;
+}
+#exercise-layout .exercise-output-card .output-heading h3{margin:0;color:#d8f7ea}
+#exercise-layout .exercise-output-card .output-heading small{line-height:1.4}
+#exercise-layout .exercise-output-card .resizable-output{
+ display:block;width:100%;height:260px;min-height:170px!important;
+ max-height:none!important;resize:vertical!important;
+ overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable;
+}
+#exercise-layout .exercise-output-card .output:has(.python-console){
+ background:#030b14!important;border:1px solid #27435d!important;
+ padding:0!important;overflow:auto!important;max-height:none!important;
+ resize:vertical!important;
+}
+#exercise-layout .exercise-output-card .python-console{
+ display:flex;flex-direction:column;min-height:100%;height:100%;overflow:hidden;
+ border:0;border-radius:0;
+}
+#exercise-layout .exercise-output-card .python-console-log{
+ flex:1 1 auto;min-height:0;max-height:none;overflow:auto;
+ scrollbar-gutter:stable;overscroll-behavior:contain;
+}
+#exercise-layout .python-flow>#grade:empty{display:none}
+@media(max-width:650px){
+ #exercise-layout .exercise-output-card{padding:16px}
+ #exercise-layout .exercise-output-card .resizable-output{height:220px}
+}
