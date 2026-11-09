@@ -44,7 +44,7 @@ def _ask(prompt=""):
     if ${prepared?'True':'False'}:
         try: value = next(_values)
         except StopIteration: raise EOFError('Falten entrades al programa.')
-        __console_out(str(prompt) + value + '\n')
+        __console_out(str(prompt) + value + '\\n')
         return value
     return str(run_sync(__console_input(str(prompt))))
 builtins.input = _ask
