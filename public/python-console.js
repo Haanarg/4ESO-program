@@ -1,6 +1,7 @@
 // Terminal Python interactiu per a tots els capítols i per a la galeria.
 // L'executor s'executa en un Worker dins d'un iframe sandbox sense same-origin.
 const PythonConsole=(()=>{
+ const RUNNER_VERSION='20261109-r3';
  let active=null;
  function stop(){
   if(!active)return;
@@ -18,7 +19,7 @@ const PythonConsole=(()=>{
   host.textContent='';
   const wrap=document.createElement('div');wrap.className='python-console';
   const head=document.createElement('div');head.className='python-console-head';
-  const status=document.createElement('span');status.textContent='Preparant la consola…';
+  const status=document.createElement('span');status.textContent='Preparant la consola · versió 20261109-r3…';
   const stopButton=document.createElement('button');stopButton.className='secondary mini-btn';stopButton.type='button';stopButton.textContent='■ Atura';
   head.append(status,stopButton);
   const output=document.createElement('pre');output.className='python-console-log';output.setAttribute('aria-live','polite');
@@ -35,7 +36,7 @@ const PythonConsole=(()=>{
   fallback.append(help,batch,batchButton);
   wrap.append(head,output,form,fallback);host.append(wrap);
   const frame=document.createElement('iframe');
-  frame.src='/python-console-frame.html';frame.setAttribute('sandbox','allow-scripts');
+  frame.src='/python-console-frame.html?v=20261109-r3';frame.setAttribute('sandbox','allow-scripts');
   // No ha d'ocupar espai ni aparèixer com un quadrat blanc encara que el CSS no es carregui.
   frame.style.display='none';frame.hidden=true;frame.setAttribute('aria-hidden','true');
   frame.setAttribute('referrerpolicy','no-referrer');frame.tabIndex=-1;frame.className='python-console-sandbox';
@@ -62,6 +63,7 @@ const PythonConsole=(()=>{
    const m=e.data||{};
    if(m.pythonConsole!==true)return;
    if(m.type==='ready'){
+    if(m.version!==RUNNER_VERSION){clearTimeout(session.bootTimer);status.textContent='⚠ Versió antiga de la consola';append('El navegador ha carregat una versió anterior de la consola. Actualitza la pàgina amb Ctrl+F5 i torna-ho a provar.');return;}
     session.ready=true;clearTimeout(session.bootTimer);
     sendMessage({type:'start',code:session.code});status.textContent='Preparant Python…';
     session.loadTimer=setTimeout(()=>{if(active===session&&status.textContent.includes('Carregant'))status.textContent='La càrrega de Python està trigant més del previst. Comprova la connexió o utilitza les entrades preparades.';},60000);
