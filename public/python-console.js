@@ -29,12 +29,7 @@ const PythonConsole=(()=>{
   const input=document.createElement('input');input.type='text';input.autocomplete='off';input.spellcheck=false;input.maxLength=3000;input.setAttribute('aria-label','Resposta al programa Python');
   const send=document.createElement('button');send.type='submit';send.textContent='Envia ↵';
   label.appendChild(input);form.append(label,send);
-  const fallback=document.createElement('div');fallback.className='python-console-fallback';fallback.hidden=true;
-  const help=document.createElement('p');help.textContent='Aquest navegador no admet les preguntes interactives de Python. Pots executar el programa amb respostes preparades, una per línia.';
-  const batch=document.createElement('textarea');batch.rows=3;batch.placeholder='Una resposta per línia';
-  const batchButton=document.createElement('button');batch.type='button';batchButton.textContent='Executa amb aquestes entrades';
-  fallback.append(help,batch,batchButton);
-  wrap.append(head,output,form,fallback);host.append(wrap);
+  wrap.append(head,output,form);host.append(wrap);
   const frame=document.createElement('iframe');
   frame.src='/python-console-frame.html?v=20261109-r3';frame.setAttribute('sandbox','allow-scripts');
   // No ha d'ocupar espai ni aparèixer com un quadrat blanc encara que el CSS no es carregui.
@@ -87,13 +82,6 @@ const PythonConsole=(()=>{
     input.focus();
     return;
    }
-   if(m.type==='unsupported'){
-    status.textContent='Mode compatible disponible';
-    resetInput();
-    fallback.hidden=false;
-    append('\nAquest navegador no admet l’entrada interactiva. Utilitza les entrades preparades.\n');
-    return;
-   }
    if(m.type==='done'){
     clearTimeout(session.loadTimer);
     if(!output.textContent.trim())output.textContent='El programa ha acabat sense mostrar missatges ni demanar cap entrada. Si vols que l’usuari pugui jugar, afegeix print(), input() i un bucle que processi les respostes.';
@@ -119,20 +107,12 @@ const PythonConsole=(()=>{
    status.textContent='Executant…';
    sendMessage({type:'answer',value});
   });
-  batchButton.addEventListener('click',()=>{
-   if(active!==session)return;
-   const raw=batch.value.replace(/\r\n?/g,'\n').replace(/\n$/,'');
-   const values=raw===''?[]:raw.split('\n');
-   fallback.hidden=true;output.textContent='';session.outputLength=0;
-   status.textContent='Executant amb entrades preparades…';
-   sendMessage({type:'prepared',values});
-  });
   stopButton.addEventListener('click',()=>{append('\n■ Execució interrompuda.\n');stop()});
   host.appendChild(frame);
   session.bootTimer=setTimeout(()=>{
    if(active!==session||session.ready)return;
    status.textContent='⚠ La consola no ha pogut carregar.';
-   append('No s’ha rebut resposta de l’executor. Torna a prémer Executar. Si continua igual, prova «Entrades preparades» a l’editor.');
+   append('No s’ha rebut resposta de l’executor. Torna a prémer Executar i, si continua igual, actualitza la pàgina amb Ctrl+F5.');
   },10000);
   return session;
  }
