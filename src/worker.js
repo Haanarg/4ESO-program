@@ -1468,13 +1468,13 @@ async function api(req,env){
   await ensureAdventureGalleryTable(env);
   const list=await env.DB.prepare(`SELECT a.id,a.user_id,a.title,a.description,a.published_at,a.updated_at,u.name AS author
    FROM adventure_gallery a JOIN users u ON u.id=a.user_id
-   JOIN submissions s ON s.id=a.submission_id AND s.user_id=a.user_id AND s.status='validated'
+   JOIN submissions s ON s.id=a.submission_id AND s.user_id=a.user_id AND s.status='validated' AND s.final_score>=5
    JOIN exercises e ON e.id=s.exercise_id AND e.code='11.4'
    ORDER BY a.updated_at DESC,a.id DESC LIMIT 200`).all();
   let can_publish=false;
   if(user.role==='student'){
    const approved=await env.DB.prepare(`SELECT s.id FROM submissions s JOIN exercises e ON e.id=s.exercise_id
-    WHERE s.user_id=? AND e.code='11.4' AND s.status='validated' ORDER BY s.id DESC LIMIT 1`).bind(user.id).first();
+    WHERE s.user_id=? AND e.code='11.4' AND s.status='validated' AND s.final_score>=5 ORDER BY s.id DESC LIMIT 1`).bind(user.id).first();
    can_publish=!!approved;
   }
   return json({adventures:list.results||[],can_publish,user_id:user.id});
@@ -1487,9 +1487,9 @@ async function api(req,env){
   if(title.length<2||title.length>80)return json({error:'El títol ha de tenir entre 2 i 80 caràcters.'},400);
   if(description.length>350)return json({error:'La descripció és massa llarga (màxim 350 caràcters).'},400);
   const approved=await env.DB.prepare(`SELECT s.id FROM submissions s JOIN exercises e ON e.id=s.exercise_id
-   WHERE s.user_id=? AND e.code='11.4' AND s.status='validated'
+   WHERE s.user_id=? AND e.code='11.4' AND s.status='validated' AND s.final_score>=5
    ORDER BY s.id DESC LIMIT 1`).bind(user.id).first();
-  if(!approved)return json({error:'Cal tenir l’exercici 11.4 validat pel professor per publicar.'},403);
+  if(!approved)return json({error:'Cal tenir l’exercici 11.4 validat pel professor i aprovat amb una nota mínima de 5/10 per publicar.'},403);
   await env.DB.prepare(`INSERT INTO adventure_gallery(user_id,submission_id,title,description)
     VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET submission_id=excluded.submission_id,title=excluded.title,
        description=excluded.description,updated_at=CURRENT_TIMESTAMP`)
@@ -1503,7 +1503,7 @@ async function api(req,env){
   const id=Number(adventureDetail[1]);
   const game=await env.DB.prepare(`SELECT a.id,a.title,a.description,a.published_at,u.name AS author,s.code
    FROM adventure_gallery a JOIN users u ON u.id=a.user_id
-   JOIN submissions s ON s.id=a.submission_id AND s.user_id=a.user_id AND s.status='validated'
+   JOIN submissions s ON s.id=a.submission_id AND s.user_id=a.user_id AND s.status='validated' AND s.final_score>=5
    JOIN exercises e ON e.id=s.exercise_id AND e.code='11.4' WHERE a.id=?`).bind(id).first();
   return game?json({adventure:game}):json({error:'Aquesta aventura no està publicada o ja no està validada.'},404);
  }
