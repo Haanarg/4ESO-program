@@ -6,6 +6,7 @@ const PythonConsole=(()=>{
   if(!active)return;
   const a=active;active=null;
   window.removeEventListener('message',a.listener);
+  clearTimeout(a.bootTimer);clearTimeout(a.loadTimer);
   try{a.frame.remove()}catch{}
   if(a.form)a.form.hidden=true;
   if(a.stop)a.stop.disabled=true;
@@ -21,6 +22,7 @@ const PythonConsole=(()=>{
   const stopButton=document.createElement('button');stopButton.className='secondary mini-btn';stopButton.type='button';stopButton.textContent='■ Atura';
   head.append(status,stopButton);
   const output=document.createElement('pre');output.className='python-console-log';output.setAttribute('aria-live','polite');
+  output.textContent='Inicia l’execució per veure aquí els missatges i respondre a input().';
   const form=document.createElement('form');form.className='python-console-input';form.hidden=true;
   const label=document.createElement('label');label.textContent='Resposta: ';
   const input=document.createElement('input');input.type='text';input.autocomplete='off';input.spellcheck=false;input.maxLength=3000;input.setAttribute('aria-label','Resposta al programa Python');
@@ -34,10 +36,13 @@ const PythonConsole=(()=>{
   wrap.append(head,output,form,fallback);host.append(wrap);
   const frame=document.createElement('iframe');
   frame.src='/python-console-frame.html';frame.setAttribute('sandbox','allow-scripts');
+  // No ha d'ocupar espai ni aparèixer com un quadrat blanc encara que el CSS no es carregui.
+  frame.style.display='none';frame.hidden=true;frame.setAttribute('aria-hidden','true');
   frame.setAttribute('referrerpolicy','no-referrer');frame.tabIndex=-1;frame.className='python-console-sandbox';
   const id=String(Date.now())+'-'+Math.random().toString(36).slice(2);
-  const session={frame,id,listener:null,form,stop:stopButton,status,code:String(code||'').slice(0,30000),outputLength:0};
+  const session={frame,id,listener:null,form,stop:stopButton,status,code:String(code||'').slice(0,30000),outputLength:0,ready:false,bootTimer:null,loadTimer:null};
   active=session;
+  output.textContent='';
   const append=(s)=>{
    if(active!==session)return;
    const text=String(s||'');
@@ -48,7 +53,7 @@ const PythonConsole=(()=>{
    output.scrollTop=output.scrollHeight;
    host.scrollTop=host.scrollHeight;
   };
-  const sendMessage=(message)=>{try{frame.contentWindow?.postMessage({id,...message},'*')}catch{}};
+  const sendMessage=(message)=>{try{frame.contentWindow?.postMessage({id,...message},'*')}catch(error){status.textContent='No es pot contactar amb la consola: '+error.message}};
   const resetInput=()=>{
    form.hidden=true;input.value='';
   };
@@ -56,11 +61,23 @@ const PythonConsole=(()=>{
    if(active!==session||e.source!==frame.contentWindow)return;
    const m=e.data||{};
    if(m.pythonConsole!==true)return;
-   if(m.type==='ready'){sendMessage({type:'start',code:session.code});status.textContent='Executant…';return}
+   if(m.type==='ready'){
+    session.ready=true;clearTimeout(session.bootTimer);
+    sendMessage({type:'start',code:session.code});status.textContent='Preparant Python…';
+    session.loadTimer=setTimeout(()=>{if(active===session&&status.textContent.includes('Carregant'))status.textContent='La càrrega de Python està trigant més del previst. Comprova la connexió o utilitza les entrades preparades.';},60000);
+    return;
+   }
    if(m.id!==id)return;
-   if(m.type==='loading'){status.textContent='Carregant Python…';return}
+   if(m.type==='loading'){status.textContent=String(m.message||'Carregant Python…');return}
    if(m.type==='output'){append(m.text);return}
+   if(m.type==='replace'){
+    clearTimeout(session.loadTimer);
+    output.textContent=String(m.text||'');session.outputLength=output.textContent.length;
+    output.scrollTop=output.scrollHeight;host.scrollTop=host.scrollHeight;
+    return;
+   }
    if(m.type==='input'){
+    clearTimeout(session.loadTimer);
     status.textContent='Esperant resposta…';
     resetInput();
     label.firstChild.textContent=String(m.prompt||'').slice(0,500)||'Resposta: ';
@@ -76,12 +93,15 @@ const PythonConsole=(()=>{
     return;
    }
    if(m.type==='done'){
+    clearTimeout(session.loadTimer);
+    if(!output.textContent.trim())output.textContent='El programa ha acabat sense mostrar missatges ni demanar cap entrada. Si vols que l’usuari pugui jugar, afegeix print(), input() i un bucle que processi les respostes.';
     status.textContent='✓ Programa acabat';
     resetInput();
     stopButton.disabled=true;
     return;
    }
    if(m.type==='error'){
+    clearTimeout(session.loadTimer);
     status.textContent='⚠ Error d’execució';
     resetInput();stopButton.disabled=true;
     append('\n'+String(m.message||'Error de Python')+'\n');
@@ -107,6 +127,11 @@ const PythonConsole=(()=>{
   });
   stopButton.addEventListener('click',()=>{append('\n■ Execució interrompuda.\n');stop()});
   host.appendChild(frame);
+  session.bootTimer=setTimeout(()=>{
+   if(active!==session||session.ready)return;
+   status.textContent='⚠ La consola no ha pogut carregar.';
+   append('No s’ha rebut resposta de l’executor. Torna a prémer Executar. Si continua igual, prova «Entrades preparades» a l’editor.');
+  },10000);
   return session;
  }
  return {run,stop};
