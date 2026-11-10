@@ -3,7 +3,12 @@
  * l'historial d'entrades. El procés viu en un Worker d'iframe sandbox.
  */
 (function(){
- const CDN='https://cdn.jsdelivr.net/pyodide/v0.28.2/full/';
+ const CDNS=[
+  'https://cdn.jsdelivr.net/pyodide/v0.28.2/full/',
+  'https://unpkg.com/pyodide@0.28.2/'
+ ];
+ // Dos proveïdors per a xarxes educatives on un CDN pot estar bloquejat.
+
  const MAX_INPUTS=250, MAX_OUTPUT=120000, MAX_CODE=30000;
  let engine=null, running=false, session=null;
  const emit=(type,detail={})=>self.postMessage({type,...detail});
@@ -42,12 +47,25 @@
   const current=session;
   running=true;
   try{
-   emit('loading',{message:engine?'Executant el programa…':'Carregant Python…'});
+   let stage='execution';
    if(!engine){
-    importScripts(CDN+'pyodide.js');
-    engine=await loadPyodide({indexURL:CDN});
+    const provider=Number(current.cdnIndex)===1?1:0;
+    const base=CDNS[provider];
+    stage='loading';
+    emit('loading',{stage,message:provider===0?'Descarregant Python (servidor principal)…':'Descarregant Python (servidor alternatiu)…'});
+    importScripts(base+'pyodide.js');
+    if(typeof loadPyodide!=='function')throw Error('El servidor no ha proporcionat el carregador de Python.');
+    emit('loading',{stage,message:'Inicialitzant Python i WebAssembly…'});
+    engine=await loadPyodide({indexURL:base});
+    emit('engine_ready');
    }
-   if(/\bmatplotlib\b/.test(current.code))await engine.loadPackage('matplotlib');
+   if(/\bmatplotlib\b/.test(current.code)){
+    stage='package';
+    emit('loading',{stage,message:'Carregant matplotlib…'});
+    await engine.loadPackage('matplotlib');
+   }
+   stage='execution';
+   emit('loading',{stage,message:'Executant el programa…'});
    let result=await engine.runPythonAsync(pythonWrapper(current.code,current.answers,current.seed));
    const output=String(result[0]??''),prompt=result[1],error=result[2];
    if(typeof result.destroy==='function')result.destroy();
@@ -59,7 +77,7 @@
     else emit('input',{prompt:String(prompt).slice(0,500)});
    }else{session=null;emit('done');}
   }catch(error){
-   session=null;emit('error',{message:String(error?.message||error||'No s’ha pogut iniciar Python.').slice(0,2200)});
+   session=null;emit('error',{stage:engine?'execution':'loading',message:String(error?.message||error||'No s’ha pogut iniciar Python.').slice(0,2200)});
   }finally{running=false;}
  }
  self.onmessage=e=>{
@@ -67,7 +85,7 @@
   if(msg.type==='start' && !running){
    const code=String(msg.code||'').slice(0,MAX_CODE);
    const inputs=msg.mode==='prepared'&&Array.isArray(msg.values)?msg.values.map(x=>String(x).slice(0,3000)).slice(0,MAX_INPUTS):[];
-   session={code,answers:inputs,seed:Math.floor(Math.random()*2147483647)};
+   session={code,answers:inputs,seed:Math.floor(Math.random()*2147483647),cdnIndex:Number(msg.cdnIndex)===1?1:0};
    replay();return;
   }
   if(msg.type==='answer' && !running && session && session.answers.length<MAX_INPUTS){
