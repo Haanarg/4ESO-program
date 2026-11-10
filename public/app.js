@@ -645,7 +645,14 @@ async function loadPy(){
     }
     if(!loaded)throw lastError||Error('Python no està disponible.');
    }
-   const engine=await loadPyodide({indexURL:base});
+   let engine;
+   try{engine=await loadPyodide({indexURL:base})}
+   catch(firstError){
+    if(base===sources[1])throw firstError;
+    if(output&&!output.querySelector('.python-console'))output.textContent='Provant el servidor alternatiu de Python per a les proves…';
+    try{engine=await loadPyodide({indexURL:sources[1]})}
+    catch(secondError){throw Error('No s’ha pogut carregar Python dels dos servidors: '+String(secondError?.message||secondError))}
+   }
    py=engine;
    return engine;
   })().catch(error=>{mainPythonLoadPromise=null;throw error});
