@@ -29,6 +29,8 @@
    }catch(error){
     send('error',{stage:'loading',message:'No es pot iniciar la consola aïllada: '+String(error.message||error)});
    }
+  }else if(msg.id===session&&child&&msg.type==='restart'){
+   child.postMessage({type:'start',code:String(msg.code||''),cdnIndex:Number(msg.cdnIndex)===1?1:0});
   }else if(msg.id===session&&child&&msg.type==='answer'){
    child.postMessage({type:'answer',value:msg.value});
   }
