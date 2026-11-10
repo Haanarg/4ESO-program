@@ -139,7 +139,7 @@ const PythonConsole=(()=>{
    }
    if(m.type==='error'){
     if(m.stage==='loading'&&!a.engineReady&&cdnIndex===0){retryAlternative();return;}
-    clearTimers(a);a.done=false;a.stage='error';
+    clearTimers(a);a.done=a.engineReady;a.stage='error';
     status.textContent='⚠ '+(m.stage==='loading'?'No s’ha pogut carregar Python':'Error d’execució');
     form.hidden=true;stopButton.disabled=true;
     append('\n'+String(m.message||'Error de Python')+'\n');
