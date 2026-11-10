@@ -611,11 +611,46 @@ async function saveDraft(manual=false){
     if(manual) alert(`No s'ha pogut desar l'esborrany: ${e.message}`);
   }finally{draftSaving=false}
 }
+let mainPythonLoadPromise=null;
 async function loadPy(){
-  if(py) return py;
-  $('#output').textContent='Carregant Python…';
-  py=await loadPyodide();
-  return py;
+ if(py)return py;
+ if(!mainPythonLoadPromise){
+  mainPythonLoadPromise=(async()=>{
+   const output=$('#output');
+   if(output&&!output.querySelector('.python-console'))
+    output.textContent='Carregant Python per a les proves automàtiques…';
+   // No carreguem el motor principal mentre els alumnes només naveguen.
+   // El Worker separat ja fa les execucions interactives.
+   const sources=[
+    'https://cdn.jsdelivr.net/pyodide/v0.28.2/full/',
+    'https://unpkg.com/pyodide@0.28.2/'
+   ];
+   let base=sources[0],lastError=null;
+   if(typeof loadPyodide!=='function'){
+    let loaded=false;
+    for(const url of sources){
+     try{
+      await new Promise((resolve,reject)=>{
+       const script=document.createElement('script');script.src=url+'pyodide.js';script.async=true;
+       let settled=false;
+       const end=error=>{if(settled)return;settled=true;clearTimeout(timeout);script.onload=null;script.onerror=null;if(error){script.remove();reject(error)}else resolve()};
+       const timeout=setTimeout(()=>end(Error('La descàrrega del motor Python ha excedit el temps límit.')),25000);
+       script.onload=()=>end();
+       script.onerror=()=>end(Error('No s’ha pogut descarregar Python del servidor.'));
+       document.head.appendChild(script);
+      });
+      if(typeof loadPyodide!=='function')throw Error('No s’ha inicialitzat el carregador Python.');
+      base=url;loaded=true;break;
+     }catch(error){lastError=error}
+    }
+    if(!loaded)throw lastError||Error('Python no està disponible.');
+   }
+   const engine=await loadPyodide({indexURL:base});
+   py=engine;
+   return engine;
+  })().catch(error=>{mainPythonLoadPromise=null;throw error});
+ }
+ return mainPythonLoadPromise;
 }
 
 function pythonWrapper(code, inputs, showInput=false){
