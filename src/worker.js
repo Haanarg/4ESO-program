@@ -958,6 +958,8 @@ async function api(req,env){
    await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id=?').bind(id).run();
    await ensureExerciseIntegrityTable(env);
    await env.DB.prepare('DELETE FROM exercise_integrity_events WHERE submission_id=?').bind(id).run();
+   await ensureRoguelikeAssetsTables(env);
+   await env.DB.prepare('DELETE FROM roguelike_submission_assets WHERE submission_id=?').bind(id).run();
    await env.DB.prepare('DELETE FROM submissions WHERE id=?').bind(id).run();
    return json({ok:true,deleted:id});
   }
@@ -1738,6 +1740,9 @@ pwd2 = input()
   try{await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id IN (SELECT id FROM submissions WHERE user_id=?)').bind(id).run();}catch{}
   await ensureExerciseIntegrityTable(env);
   await env.DB.prepare('DELETE FROM exercise_integrity_events WHERE user_id=?').bind(id).run();
+  await ensureRoguelikeAssetsTables(env);
+  await env.DB.prepare('DELETE FROM roguelike_submission_assets WHERE submission_id IN (SELECT id FROM submissions WHERE user_id=?)').bind(id).run();
+  await env.DB.prepare('DELETE FROM roguelike_assets WHERE user_id=?').bind(id).run();
   await env.DB.prepare('DELETE FROM submissions WHERE user_id=?').bind(id).run();
   await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
   await env.DB.prepare(`DELETE FROM users WHERE id=? AND role='student'`).bind(id).run();
@@ -1815,6 +1820,8 @@ pwd2 = input()
   try{await env.DB.prepare('DELETE FROM submission_feedback WHERE submission_id=?').bind(id).run();}catch{}
   await ensureExerciseIntegrityTable(env);
   await env.DB.prepare('DELETE FROM exercise_integrity_events WHERE submission_id=?').bind(id).run();
+  await ensureRoguelikeAssetsTables(env);
+  await env.DB.prepare('DELETE FROM roguelike_submission_assets WHERE submission_id=?').bind(id).run();
   await env.DB.prepare('DELETE FROM submissions WHERE id=?').bind(id).run();
   return json({ok:true,deleted:id});
  }
