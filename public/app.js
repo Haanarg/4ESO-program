@@ -539,14 +539,29 @@ async function dashboard(){
  const last={},drafts={};
  try{const x=await api('/api/my-submissions');for(const s of x.submissions)if(!last[s.exercise_id])last[s.exercise_id]=s;if(!studentPreview){const dr=await api('/api/my-drafts');for(const x of dr.drafts||[])drafts[x.exercise_id]=x}}catch{}
  const done=e=>last[e.id]?.status==='validated'&&last[e.id]?.final_score!=null;
+ const passed=e=>last[e.id]?.status==='validated'&&Number(last[e.id]?.final_score)>=5;
  const n=exercises.filter(done).length,pct=exercises.length?Math.round(n*100/exercises.length):0;
  $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner\"><strong>👁 Vista d'alumne</strong><span>Estàs previsualitzant el curs. Pots executar exercicis, però no entregar-los.</span><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Tornar al panell del professor</button></div>":''}${typeof studentExamCards==='function'?studentExamCards(examItems):''}<div class="course-heading"><div><h1>Programació 4ESO</h1><p>Recorregut de Python: dels primers print() fins als projectes finals.</p></div><strong>${n}/${exercises.length} tasques · ${pct}%</strong></div><div class="course-progress"><span style="width:${pct}%"></span></div><div id="list"></div>`;
  for(const chapter of Object.keys(chapterNames).map(Number)){
-  const ce=exercises.filter(x=>x.chapter===chapter);if(!ce.length)continue;const cd=ce.filter(done).length,symbol=cd===ce.length?'✓':cd?'●':'○';
-  $('#list').insertAdjacentHTML('beforeend',`<h2 class="chapter-title"><span>${symbol} Capítol ${chapter}: ${esc(chapterNames[chapter])}</span><small>${cd}/${ce.length}</small></h2>`);
-  $('#list').insertAdjacentHTML('beforeend',`<div class="card theory-card" onclick="openTheory(${chapter})"><div class="theory-card-icon">📖</div><div><span class="pill theory-pill">TEORIA</span><h3>Teoria · ${esc(chapterNames[chapter])}</h3><p>Conceptes, explicacions i exemples del curs original abans de començar els exercicis.</p></div><span class="theory-arrow">→</span></div>`);
-  ce.forEach(x=>{const sub=last[x.id];const status=sub?.status==='returned'?'<span class="status returned">↩ Retornada</span>':sub?.final_score!=null?`<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`:sub?.ai_result_json?'<span class="status pending">Pendent de validació</span>':drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'';const note=sub?.teacher_comment?`<div class="dashboard-teacher-note">💬 ${esc(sub.teacher_comment)}</div>`:'';$('#list').insertAdjacentHTML('beforeend',`<div class="card exercise" onclick="openExercise(${x.id})"><span class="pill">${esc(x.type)}</span><h3>${esc(x.code)} · ${esc(x.title)}</h3><p>${esc(x.statement.slice(0,220))}${x.statement.length>220?'…':''}</p>${status}${note}</div>`);});
-   if(chapter===11)$('#list').insertAdjacentHTML('beforeend','<div class="card exercise gallery-course-card" onclick="openAdventureGallery()"><span class="pill">GALERIA</span><h3>11.5 · Galeria d’aventures</h3><p>Juga als projectes del grup i publica la teva aventura quan el professor hagi validat l’11.4.</p><span class="status draft">▶ Explora la galeria</span></div>');
+  const ce=exercises.filter(x=>x.chapter===chapter);
+  if(!ce.length)continue;
+  const approved=ce.filter(passed).length;
+  const complete=approved===ce.length;
+  const theoryCard=`<div class="card theory-card" onclick="openTheory(${chapter})"><div class="theory-card-icon">📖</div><div><span class="pill theory-pill">TEORIA</span><h3>Teoria · ${esc(chapterNames[chapter])}</h3><p>Conceptes, explicacions i exemples del curs original abans de començar els exercicis.</p></div><span class="theory-arrow">→</span></div>`;
+  let exerciseCards='';
+  ce.forEach(x=>{
+    const sub=last[x.id];
+    const status=sub?.status==='returned'?'<span class="status returned">↩ Retornada</span>':sub?.final_score!=null?`<span class="status ok">Nota validada: ${esc(sub.final_score)}/10</span>`:sub?.ai_result_json?'<span class="status pending">Pendent de validació</span>':drafts[x.id]?'<span class="status draft">💾 Esborrany desat</span>':'';
+    const note=sub?.teacher_comment?`<div class="dashboard-teacher-note">💬 ${esc(sub.teacher_comment)}</div>`:'';
+    exerciseCards+=`<div class="card exercise" onclick="openExercise(${x.id})"><span class="pill">${esc(x.type)}</span><h3>${esc(x.code)} · ${esc(x.title)}</h3><p>${esc(x.statement.slice(0,220))}${x.statement.length>220?'…':''}</p>${status}${note}</div>`;
+  });
+  if(chapter===11)exerciseCards+='<div class="card exercise gallery-course-card" onclick="openAdventureGallery()"><span class="pill">GALERIA</span><h3>11.5 · Galeria d’aventures</h3><p>Juga als projectes del grup i publica la teva aventura quan el professor hagi validat l’11.4.</p><span class="status draft">▶ Explora la galeria</span></div>';
+  const content=`<div class="chapter-content">${theoryCard}${exerciseCards}</div>`;
+  if(complete){
+    $('#list').insertAdjacentHTML('beforeend',`<details class="chapter-group chapter-complete"><summary class="chapter-title chapter-toggle"><span>Capítol ${chapter}: ${esc(chapterNames[chapter])}</span><small>✓ Complet · ${approved}/${ce.length}</small></summary>${content}</details>`);
+  }else{
+    $('#list').insertAdjacentHTML('beforeend',`<section class="chapter-group chapter-pending"><div class="chapter-title chapter-title-static"><span>Capítol ${chapter}: ${esc(chapterNames[chapter])}</span><small>${approved}/${ce.length} aprovats</small></div>${content}</section>`);
+  }
  }
 }
 function exerciseIntegrityEvent(eventType,meta={}){
