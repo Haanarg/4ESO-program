@@ -748,6 +748,7 @@ async function aiGrade(env, exercise, code, tests){
   const markerIndexes=researchMarkers.map(m=>code.indexOf(m)).filter(i=>i>=0);
   const researchMarkerIndex=markerIndexes.length?Math.min(...markerIndexes):-1;
   const isResearchTask=researchMarkerIndex>=0;
+  const chapter12Analysis=Number(exercise.chapter)===12 && ["predict","investigate"].includes(exercise.type);
   const studentAnswer=isResearchTask ? code.slice(researchMarkerIndex) : code;
 
   const prompt=`Ets un corrector pedagògic de Programació Python de 4t d'ESO.
@@ -786,7 +787,7 @@ CODI / RESPOSTA DE L'ALUMNE
 ${studentAnswer}
 
 NOTA SOBRE TASQUES D'INVESTIGACIÓ
-${isResearchTask ? "Aquesta és una tasca d'investigació. Avalua exclusivament el contingut a partir del marcador '##### Tasca d'Investigació'. Tot el contingut anterior al marcador és material proporcionat a l'alumne: no l'atribueixis a l'alumne ni li concedeixis punts per aquest contingut." : "No s'ha detectat el marcador de tasca d'investigació."}`;
+${isResearchTask ? "Aquesta és una tasca d'investigació. Avalua exclusivament el contingut a partir del marcador '##### Tasca d'Investigació'. Tot el contingut anterior al marcador és material proporcionat a l'alumne: no l'atribueixis a l'alumne ni li concedeixis punts per aquest contingut." : chapter12Analysis ? "Per al 12.1 i el 12.2, el codi executable és material inicial proporcionat. Avalua la qualitat i correcció de les respostes escrites als comentaris, NO el fet que aquest codi ja funcioni. Els comentaris buits o els enunciats de pregunta sense resposta no es poden puntuar com a feina feta." : "No s'ha detectat el marcador de tasca d'investigació."}`;
 
   const schema={type:"object",properties:{
     score:{type:"number",minimum:0,maximum:10},
