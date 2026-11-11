@@ -28,3 +28,6 @@ button.secondary{background:#1b314a;color:#d9eafc;border-color:#426280}
 .box .help{font-size:12px;color:#91a8bf}footer{padding-top:35px;color:#8899b0;font-size:12px}
 @media(max-width:1000px){.layout{grid-template-columns:1fr}.sidebar{grid-template-columns:repeat(auto-fit,minmax(245px,1fr))}}
 @media(max-width:640px){main{padding:18px 12px 70px}.game-panel{padding:11px}.box{padding:14px}.game-board{border-width:2px}.hud{justify-content:flex-start}.game-actions button{flex:1 1 180px}}
+.game-custom-actions{display:flex;flex-wrap:wrap;gap:7px;padding:9px 0 3px}
+.game-custom-actions[hidden]{display:none!important}
+.game-custom-actions button{min-width:110px;background:#1f3b57;border:1px solid #456e8d;color:#d9edf8;padding:9px 10px;font-size:12px}
