@@ -508,7 +508,7 @@ function renderTheory(md){
 function openTheory(chapter){
  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
- const names={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Aventura de text: entrades, bucles i funcions',12:'Personal Database'};
+ const names={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Aventura de text: entrades, bucles i funcions',12:'Mapes 2D i lògica de videojocs'};
  const md=COURSE_THEORY?.[chapter]||COURSE_THEORY?.[String(chapter)]||'';
  $('#app').innerHTML=`${studentPreview?`<div class="preview-banner compact"><strong>👁 Vista d'alumne</strong><button class="secondary" onclick="exitStudentPreview()">← Panell professor</button></div>`:''}<article class="card theory-page"><div class="theory-eyebrow">📖 Teoria · Capítol ${chapter}</div><div class="theory-content">${renderTheory(md)}</div><div class="theory-footer"><button class="secondary" onclick="dashboard()">← Índex del curs</button><button onclick="openFirstExercise(${chapter})">Comença els exercicis →</button></div></article>`;
  window.scrollTo({top:0,behavior:'smooth'});
@@ -526,7 +526,7 @@ async function dashboard(){
    }catch{}
  }
  const d=await api('/api/exercises'); exercises=d.exercises;
- const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Aventura de text: entrades, bucles i funcions',12:'Personal Database'};
+ const chapterNames={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Aventura de text: entrades, bucles i funcions',12:'Mapes 2D i lògica de videojocs'};
  const last={},drafts={};
  try{const x=await api('/api/my-submissions');for(const s of x.submissions)if(!last[s.exercise_id])last[s.exercise_id]=s;if(!studentPreview){const dr=await api('/api/my-drafts');for(const x of dr.drafts||[])drafts[x.exercise_id]=x}}catch{}
  const done=e=>last[e.id]?.status==='validated'&&last[e.id]?.final_score!=null;
