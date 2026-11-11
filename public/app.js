@@ -409,12 +409,14 @@ async function teacherSaveCorrection(id){
 }
 function filterProgressChapter(){const v=$('#progress-chapter')?.value||'all';document.querySelectorAll('.progress-table [data-chapter]').forEach(x=>x.style.display=(v==='all'||x.dataset.chapter===v)?'':'none')}
 async function teacherStudentDetail(id){
+ if(typeof GameLab!=='undefined')GameLab.stop();
   if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  const d=await api(`/api/teacher/students/${id}/progress`),{student,exercises:exs,submissions:subs,drafts}=d,byEx={};for(const s of subs)(byEx[s.exercise_id]??=[]).push(s);
  const val=subs.filter(s=>s.status==='validated'&&s.final_score!=null),avg=val.length?(val.reduce((x,s)=>x+Number(s.final_score),0)/val.length).toFixed(1):'—',chs=[...new Set(exs.map(e=>e.chapter))];
  $('#app').innerHTML=`<section class="card student-detail"><div class="progress-toolbar"><div><h1>${esc(student.name)}</h1><p class="muted">${esc(student.email)}</p></div><div class="student-detail-actions"><button id="reset-pass-${student.id}" class="secondary" onclick="generatePasswordReset(${student.id})">🔑 Genera codi</button><button class="secondary" onclick="teacherProgress()">← Seguiment</button></div></div><div class="student-kpis"><div><strong>${val.length}/${exs.length}</strong><span>Tasques validades</span></div><div><strong>${avg}${avg!=='—'?'/10':''}</strong><span>Mitjana validada</span></div><div><strong>${drafts.length}</strong><span>Esborranys</span></div></div><div class="chapter-summary">${chs.map(ch=>{const ce=exs.filter(e=>e.chapter===ch),n=ce.filter(e=>(byEx[e.id]||[]).some(s=>s.status==='validated'&&s.final_score!=null)).length;return `<div><strong>Capítol ${ch}</strong><span>${n}/${ce.length}</span><div class="mini-progress"><i style="width:${ce.length?Math.round(n*100/ce.length):0}%"></i></div></div>`}).join('')}</div><h2>Historial d'entregues</h2>${exs.map(e=>{const arr=byEx[e.id]||[];return arr.length?`<div class="student-exercise-history"><h3>${esc(e.code)} · ${esc(e.title)}</h3>${arr.map((s,i)=>{const n=s.final_score??s.returned_score;return `<div class="history-line"><span>Intent ${i+1}</span><span>${esc(s.submitted_at)}</span><strong>${teacherProgressCorrectionLink(s,student.id,'detail',n!=null?esc(n)+'/10':'Corregir','history-correction-button',s.status==='returned'?'Reobre la correcció de l’intent retornat':'Reobre la correcció d’aquest intent')}</strong><span class="history-state-and-alerts"><span>${s.status==='validated'?'Validat':s.status==='returned'?'Retornat':'Pendent'}</span>${exerciseIntegrityMiniChips(s.integrity_counts)}</span>${s.teacher_comment?`<p>💬 ${esc(s.teacher_comment)}</p>`:''}</div>`}).join('')}</div>`:''}).join('')||'<p>Encara no hi ha entregues.</p>'}</section>`;
 }
 async function teacherProgress(){
+ if(typeof GameLab!=='undefined')GameLab.stop();
   if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   const d=await api('/api/teacher/progress');
   const students=d.students||[], exs=d.exercises||[], subs=d.submissions||[], drafts=d.drafts||[];
@@ -841,6 +843,7 @@ function teacherSubmissionAuditHtml(counts,audit,balanced,distinct,repeated,draf
   '<span><b>'+esc(drafts)+'</b> esborranys, no comptabilitzats com a lliuraments</span>'+warning+anomalies+mismatch+'</div>';
 }
 async function teacherDashboard(){
+ if(typeof GameLab!=='undefined')GameLab.stop();
  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   try{
     const d=await api('/api/teacher/submissions');
