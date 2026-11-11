@@ -606,39 +606,16 @@ const EXAM_TOPIC_RULES={
     "limits": "L'exercici ha de ser curt i examinable; no exigeixis un projecte llarg, fitxers, gràfics, classes ni llibreries externes."
   },
   "12": {
-    "name": "Personal Database",
-    "focus": "diccionaris simples per organitzar registres, CSV bàsic o visualització elemental amb matplotlib.pyplot",
+    "name": "Mapes 2D i lògica de videojocs",
+    "focus": "mapes 2D de files de text, coordenades x/y, tuples de moviment, diccionaris d'estat, col·lisions i funcions que processen un torn",
     "allowed": [
-      "print",
-      "strings",
-      "variables",
-      "input",
-      "concatenation",
-      "int",
-      "arithmetic",
-      "if",
-      "elif",
-      "else",
-      "comparisons",
-      "while",
-      "counters",
-      "lists",
-      "indexing",
-      "append",
-      "insert",
-      "remove",
-      "len",
-      "def",
-      "parameters",
-      "return",
-      "for",
-      "slicing",
-      "string_methods",
-      "dictionaries",
-      "csv",
-      "matplotlib"
+      "print", "strings", "variables", "input", "concatenation", "int", "arithmetic",
+      "if", "elif", "else", "comparisons", "while", "counters", "lists",
+      "indexing", "append", "insert", "remove", "len", "def", "parameters",
+      "return", "for", "slicing", "string_methods", "dictionaries",
+      "coordinates", "grids", "game_state", "collisions", "turns"
     ],
-    "limits": "Tria una sola habilitat central (diccionari, CSV o gràfic) i mantén l'exercici curt. No utilitzis pandas, numpy, classes, xarxa ni tècniques de ciència de dades avançades."
+    "limits": "Exercici curt sobre mapes, coordenades, col·lisions o actualització de l'estat. Sense Pygame, classes, fitxers, paquets externs ni recursió."
   }
 };
 
@@ -655,7 +632,7 @@ function generatedExamViolations(chapter,candidate){
     {min:8,label:"llistes",re:/\bllist(?:a|es)\b|\bappend\s*\(|\binsert\s*\(|\bremove\s*\(|\bindex(?:aci[oó]|ar|ing)?\b|\bíndex\b/i},
     {min:9,label:"funcions",re:/\bdef\s+\w+\s*\(|\breturn\b|\bfunci[oó]\b|\bsubrutina\b|\bpar[aà]metr/i},
     {min:10,label:"for/criptografia",re:/\bfor\b|\bslicing\b|\bxifrat\b|\bcriptograf|\bcaesar\b|\bvigen[eè]re\b|\brsa\b/i},
-    {min:12,label:"dades/gràfics",re:/\bdiccionari\b|\bcsv\b|\bmatplotlib\b|\bpyplot\b|\bgr[aà]fic\b/i}
+    {min:12,label:"mapes 2D",re:/\bcoordenad|\bcasell|\bmatriu\b|\broguelike\b|\bmapa\s*\[|\bcol·lisi/i}
   ];
   const violations=[];
   for(const rule of thresholds) if(chapter<rule.min && rule.re.test(text)) violations.push(rule.label);
@@ -669,7 +646,7 @@ function generatedExamViolations(chapter,candidate){
   ];
   for(const [label,re] of common) if(re.test(text)) violations.push(label);
   if(chapter<12 && /\bimport\s+\w+|\bfrom\s+\w+\s+import\b/i.test(String(candidate?.starter_code||""))) violations.push("imports");
-  if(chapter===12 && /\bimport\s+(?!csv\b|matplotlib\b)|\bfrom\s+(?!matplotlib\b)/i.test(String(candidate?.starter_code||""))) violations.push("import no permès");
+  if(chapter===12 && /\b(?:import\s+|from\s+\w+\s+import\s+)/i.test(String(candidate?.starter_code||""))) violations.push("import no permès");
   return [...new Set(violations)];
 }
 
@@ -750,7 +727,7 @@ Retorna només el JSON estructurat demanat.`;
       9:["def","parameters","return"],
       10:["for","slicing","cryptography"],
       11:["program_flow","def","parameters"],
-      12:["dictionaries","csv","matplotlib"]
+      12:["coordinates","grids","game_state","collisions","turns"]
     };
     const required=requiredByChapter[chapter]||[];
     if(required.length && !parsed.concepts_used.some(x=>required.includes(x))){
