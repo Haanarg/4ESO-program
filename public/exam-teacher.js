@@ -10,7 +10,7 @@ const EXAM_TOPIC_OPTIONS=[
   [9,'Subrutines'],
   [10,'Criptografia'],
   [11,'Input Loop Adventure Game'],
-  [12,'Personal Database']
+  [12,'Mapes 2D i lògica de videojocs']
 ];
 
 function examTopicOptions(){
