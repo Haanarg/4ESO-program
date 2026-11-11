@@ -89,6 +89,21 @@ class Chapter12Tests(unittest.TestCase):
         self.assertEqual(restart["torns"], 0)
         self.assertFalse(restart["te_clau"])
 
+    def test_12_5_configurable_actions_and_free_inventory(self):
+        scope, _ = execute(self.course["12.5"]["starter"])
+        initial = scope["inicia"]()
+        self.assertEqual(initial["controls"]["espai"]["accio"], "esperar")
+        self.assertEqual(initial["controls"]["i"]["accio"], "inventari")
+        inventory = scope["torn"]("inventari")
+        self.assertEqual(inventory["torns"], 0)
+        self.assertIn("Inventari", inventory["missatge"])
+        waiting = scope["torn"]("esperar")
+        self.assertEqual(waiting["torns"], 1)
+        self.assertEqual(waiting["jugador"], [1, 1])
+        scope["controls"]["q"] = {"accio": "pocio", "etiqueta": "Beure poció"}
+        self.assertEqual(scope["pantalla"]()["controls"]["q"]["accio"], "pocio")
+        self.assertEqual(scope["torn"]("pocio")["torns"], 1)
+
     def test_no_input_loop_in_12_5_starter(self):
         code = self.course["12.5"]["starter"]
         statements = "\n".join(line for line in code.splitlines() if not line.lstrip().startswith("#"))
