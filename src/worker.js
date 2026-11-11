@@ -99,6 +99,37 @@ function boundedIntegrityMeta(raw,type){
  return meta;
 }
 
+
+// Sprites 12.5: només imatges ràster petites, mai SVG o HTML executable.
+const ROGUELIKE_SLOTS=new Set(['terra','paret','jugador','enemic','clau','porta','pocio','premi']);
+async function ensureRoguelikeAssetsTables(env){
+ await env.DB.prepare(`CREATE TABLE IF NOT EXISTS roguelike_assets(
+  user_id INTEGER NOT NULL,exercise_id INTEGER NOT NULL,slot TEXT NOT NULL,
+  image TEXT NOT NULL,source TEXT NOT NULL DEFAULT '',license TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(user_id,exercise_id,slot)
+ )`).run();
+ await env.DB.prepare(`CREATE TABLE IF NOT EXISTS roguelike_submission_assets(
+  submission_id INTEGER NOT NULL,slot TEXT NOT NULL,
+  image TEXT NOT NULL,source TEXT NOT NULL DEFAULT '',license TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY(submission_id,slot)
+ )`).run();
+}
+function validateRoguelikeImage(raw){
+ const image=String(raw||'');
+ const match=image.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/);
+ if(!match||image.length>90000)return null;
+ let bytes;
+ try{bytes=atob(match[2])}catch{return null}
+ if(!bytes||bytes.length>64000)return null;
+ const ord=i=>bytes.charCodeAt(i);
+ const mime=match[1];
+ const png=mime==='png'&&bytes.length>24&&[137,80,78,71,13,10,26,10].every((n,i)=>ord(i)===n);
+ const jpg=mime==='jpeg'&&bytes.length>10&&ord(0)===255&&ord(1)===216&&ord(2)===255;
+ const webp=mime==='webp'&&bytes.length>16&&bytes.slice(0,4)==='RIFF'&&bytes.slice(8,12)==='WEBP';
+ return png||jpg||webp?image:null;
+}
+
 const RESET_CODE_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function normalizeResetCode(code){return String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
 function newPasswordResetCode(){
