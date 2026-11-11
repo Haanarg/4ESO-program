@@ -1701,6 +1701,11 @@ pwd2 = input()
  const b=await req.json();const code=String(b.code||'').slice(0,30000);
  const ai=await aiGrade(env,e,code,b.tests||[]);
  const result=await env.DB.prepare('INSERT INTO submissions(user_id,exercise_id,code,test_results_json,ai_result_json,status) VALUES(?,?,?,?,?,?) RETURNING id,submitted_at').bind(user.id,e.id,code,JSON.stringify(b.tests||[]),JSON.stringify(ai),'pending').first();
+ if(e.code==='12.5'){
+  await ensureRoguelikeAssetsTables(env);
+  await env.DB.prepare(`INSERT INTO roguelike_submission_assets(submission_id,slot,image,source,license)
+    SELECT ?,slot,image,source,license FROM roguelike_assets WHERE user_id=? AND exercise_id=?`).bind(result.id,user.id,e.id).run();
+ }
  await ensureExerciseIntegrityTable(env);
  await env.DB.prepare('UPDATE exercise_integrity_events SET submission_id=? WHERE user_id=? AND exercise_id=? AND submission_id IS NULL').bind(result.id,user.id,e.id).run();
  try{await env.DB.prepare('DELETE FROM drafts WHERE user_id=? AND exercise_id=?').bind(user.id,e.id).run();}catch{}
