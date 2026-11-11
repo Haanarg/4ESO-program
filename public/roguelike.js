@@ -8,6 +8,34 @@
        switchServer=$('switch-server'),fallback=$('game-fallback');
  const TILE=32;
  let worker=null,serial=0,world=null,busy=true,timer=null,warnTimer=null,cdnIndex=0;
+ const RESERVED=new Set(['w','a','s','d']),MOVEMENT=new Set(['amunt','avall','esquerra','dreta']);
+ let customActions=new Map(),lastActionSignature='';
+ function drawCustomControls(raw){
+  const data=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+  const actions=[];
+  for(const [key,value] of Object.entries(data)){
+   const k=key.trim().toLowerCase();
+   if(!/^(?:[a-z0-9]|espai|enter)$/.test(k)||RESERVED.has(k)||actions.some(a=>a.key===k))continue;
+   const action=typeof value==='string'?value:value?.accio;
+   if(typeof action!=='string'||!/^[a-z][a-z0-9_]{0,31}$/.test(action))continue;
+   const label=typeof value==='object'&&typeof value?.etiqueta==='string'&&value.etiqueta.trim()
+    ?value.etiqueta.trim().slice(0,42):action.replace(/_/g,' ');
+   actions.push({key:k,action,label});
+   if(actions.length>=12)break;
+  }
+  const signature=JSON.stringify(actions);
+  if(signature===lastActionSignature)return;
+  lastActionSignature=signature;customActions=new Map(actions.map(a=>[a.key,a.action]));
+  const host=$('game-custom-actions');if(!host)return;
+  host.replaceChildren();host.hidden=actions.length===0;
+  for(const a of actions){
+   const button=document.createElement('button');button.type='button';
+   button.className='secondary';
+   button.textContent=a.label+' ['+(a.key==='espai'?'Espai':a.key==='enter'?'Enter':a.key.toUpperCase())+']';
+   button.addEventListener('click',()=>sendAction(a.action));
+   host.appendChild(button);
+  }
+ }
  ctx.imageSmoothingEnabled=false;
  function setStatus(text){status.textContent=text}
  function clearTimers(){clearTimeout(timer);clearTimeout(warnTimer);timer=null;warnTimer=null}
@@ -17,12 +45,12 @@
  }
  function startWorker(index=0){
   clearTimers();if(worker){worker.terminate();worker=null;}
-  serial++;const id=serial;world=null;busy=true;cdnIndex=index;
+  serial++;const id=serial;world=null;busy=true;cdnIndex=index;drawCustomControls({});
   start.disabled=true;fallback.hidden=true;notice.textContent='Preparant la masmorra…';
   setStatus(index?'Servidor alternatiu: carregant Python…':'Carregant Python…');
   renderSplash();
   let w;
-  try{w=new Worker('/roguelike-worker.js?v=20261111-r1')}catch(e){error('Aquest navegador no admet el motor del joc: '+e.message);return;}
+  try{w=new Worker('/roguelike-worker.js?v=20261111-actions-v1')}catch(e){error('Aquest navegador no admet el motor del joc: '+e.message);return;}
   worker=w;
   const current=()=>id===serial&&worker===w;
   w.onmessage=event=>{
@@ -31,7 +59,7 @@
    if(msg.type==='loading'){setStatus(msg.message||'Carregant Python…');return;}
    if(msg.type==='ready'){clearTimers();setStatus('Python carregat. Preparant la partida…');return;}
    if(msg.type==='state'){
-    clearTimers();world=msg.state;busy=false;start.disabled=false;
+    clearTimers();world=msg.state;busy=false;start.disabled=false;drawCustomControls(world.controls);
     setStatus(world.estat==='jugant'?'● Partida en curs':world.estat==='victoria'?'★ Victòria':'✖ Partida acabada');
     notice.textContent=String(world.missatge||'');
     hp.textContent='♥ '+world.vida+' / '+world.vida_max;
@@ -60,9 +88,10 @@
    else error('Python no respon als dos servidors. La xarxa pot bloquejar Pyodide; prova una altra connexió.');
   },index===0?55000:85000);
  }
- function sendMove(direction){
+ function sendAction(action){
   if(!world||busy||world.estat!=='jugant'||!worker)return;
-  busy=true;worker.postMessage({type:'move',direction});
+  if(!MOVEMENT.has(action)&&![...customActions.values()].includes(action))return;
+  busy=true;worker.postMessage(MOVEMENT.has(action)?{type:'move',direction:action}:{type:'action',action});
  }
  function newGame(){
   if(!worker||!world){startWorker(cdnIndex);return;}
@@ -167,11 +196,14 @@
  const controls={ArrowUp:'amunt',ArrowDown:'avall',ArrowLeft:'esquerra',ArrowRight:'dreta',
    w:'amunt',s:'avall',a:'esquerra',d:'dreta',W:'amunt',S:'avall',A:'esquerra',D:'dreta'};
  document.addEventListener('keydown',e=>{
-  if(e.altKey||e.ctrlKey||e.metaKey||e.target?.matches?.('input,textarea,[contenteditable]'))return;
-  const dir=controls[e.key];if(dir){e.preventDefault();sendMove(dir);}
+  if(e.altKey||e.ctrlKey||e.metaKey||e.repeat||e.target?.matches?.('input,textarea,[contenteditable]'))return;
+  if((e.key==='Enter'||e.key===' ')&&e.target?.closest?.('button'))return;
+  const k=e.key===' '?'espai':e.key==='Enter'?'enter':e.key.length===1?e.key.toLowerCase():null;
+  const action=controls[e.key]||customActions.get(k);
+  if(action){e.preventDefault();sendAction(action);}
  });
  document.querySelectorAll('[data-move]').forEach(button=>{
-  button.addEventListener('click',()=>sendMove(button.dataset.move));
+  button.addEventListener('click',()=>sendAction(button.dataset.move));
  });
  start.addEventListener('click',newGame);
  switchServer.addEventListener('click',()=>startWorker(cdnIndex===0?1:0));
