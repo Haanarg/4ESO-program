@@ -91,8 +91,9 @@ class Chapter12Tests(unittest.TestCase):
 
     def test_no_input_loop_in_12_5_starter(self):
         code = self.course["12.5"]["starter"]
-        self.assertNotIn("input(", code)
-        self.assertNotIn("while True:", code)
+        statements = "\n".join(line for line in code.splitlines() if not line.lstrip().startswith("#"))
+        self.assertNotIn("input(", statements)
+        self.assertNotIn("while True:", statements)
 
 
 if __name__ == "__main__":
