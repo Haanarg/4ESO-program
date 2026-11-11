@@ -6,8 +6,8 @@
  <meta name="theme-color" content="#0b1120">
  <meta name="robots" content="noindex">
  <title>Masmorra Python · prototip Programació 4ESO</title>
- <link rel="stylesheet" href="/roguelike.css?v=20261111-r1">
- <script src="/roguelike.js?v=20261111-r1" defer></script>
+ <link rel="stylesheet" href="/roguelike.css?v=20261111-actions-v1">
+ <script src="/roguelike.js?v=20261111-actions-v1" defer></script>
 </head>
 <body>
  <header class="top">
@@ -56,12 +56,13 @@
       <button class="down" type="button" data-move="avall" aria-label="Avall">↓</button>
       <button class="right" type="button" data-move="dreta" aria-label="Dreta">→</button>
      </div>
-     <p class="help">Amb teclat: fletxes o W · A · S · D. Cada moviment compta com un torn. Els monstres poden perseguir-te.</p>
+     <p class="help">Moviment: fletxes o W · A · S · D. Les accions especials les defineix Python. Esperar gasta un torn, però consultar l'inventari no.</p>
+      <div id="game-custom-actions" class="game-custom-actions" aria-label="Accions especials" hidden></div>
     </section>
     <section class="box">
      <h2>Què és Python aquí?</h2>
      <p>El fitxer <code>roguelike-prototype.py</code> defineix el mapa, les funcions <code>inicia()</code> i <code>torn()</code>, la vida, les pocions i la IA dels enemics.</p>
-     <p>JavaScript només tradueix l'estat del joc en píxels i envia les direccions del teclat al programa Python.</p>
+     <p>JavaScript dibuixa el joc i envia les accions del teclat al programa Python. El diccionari <code>CONTROLS</code> defineix tecles i botons especials.</p>
      <a class="link" href="https://github.com/Haanarg/4ESO-program/blob/main/public/roguelike-prototype.py" target="_blank" rel="noopener">Consulta el codi Python del joc</a>
     </section>
     <section class="box">
