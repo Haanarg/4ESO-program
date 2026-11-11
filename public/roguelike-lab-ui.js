@@ -10,7 +10,7 @@ const GameLab=(()=>{
   return `<section class="card game-lab-card" id="game-lab" aria-label="Laboratori gràfic del projecte 12.5">
     <div class="game-lab-top"><div><span class="pill">PROJECTE FINAL · 12.5</span>
     <h2>🎮 Laboratori de videojocs 2D</h2>
-    <p>Escriu les funcions <code>inicia()</code> i <code>torn(direccio)</code> a l'editor de dalt. Aquí pots jugar al teu codi Python amb les fletxes o WASD, i definir altres tecles i accions al diccionari <code>controls</code> que retorna <code>pantalla()</code>.</p></div>
+    <p>Escriu les funcions <code>inicia()</code> i <code>torn(accio)</code> a l'editor de dalt. Aquí pots jugar al teu codi Python amb les fletxes o WASD, i definir altres tecles i accions al diccionari <code>controls</code> que retorna <code>pantalla()</code>.</p></div>
     <div class="game-lab-actions">
       <button type="button" id="game-lab-run" class="run-primary">▶ Prova el joc</button>
       <button type="button" id="game-lab-stop" class="secondary">■ Atura</button>
