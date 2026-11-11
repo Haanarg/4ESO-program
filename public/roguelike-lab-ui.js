@@ -1,6 +1,6 @@
 /* Eines del projecte 12.5: editor del curs + visor aïllat + sprites persistents. */
 const GameLab=(()=>{
- const VERSION='20261111-lab1';
+ const VERSION='20261111-actions-v1';
  const SLOTS=[['terra','Terra'],['paret','Paret'],['jugador','Personatge'],['enemic','Enemic'],['clau','Clau'],['porta','Porta'],['pocio','Poció'],['premi','Punts / premi']];
  let active=null,assets={},meta={},config=null,nonce=0,frameTimer=null;
  const get=id=>document.getElementById(id);
@@ -10,7 +10,7 @@ const GameLab=(()=>{
   return `<section class="card game-lab-card" id="game-lab" aria-label="Laboratori gràfic del projecte 12.5">
     <div class="game-lab-top"><div><span class="pill">PROJECTE FINAL · 12.5</span>
     <h2>🎮 Laboratori de videojocs 2D</h2>
-    <p>Escriu les funcions <code>inicia()</code> i <code>torn(direccio)</code> a l'editor de dalt. Aquí pots jugar al teu codi Python amb les fletxes o WASD.</p></div>
+    <p>Escriu les funcions <code>inicia()</code> i <code>torn(direccio)</code> a l'editor de dalt. Aquí pots jugar al teu codi Python amb les fletxes o WASD, i definir altres tecles i accions al diccionari <code>controls</code> que retorna <code>pantalla()</code>.</p></div>
     <div class="game-lab-actions">
       <button type="button" id="game-lab-run" class="run-primary">▶ Prova el joc</button>
       <button type="button" id="game-lab-stop" class="secondary">■ Atura</button>
@@ -34,7 +34,7 @@ const GameLab=(()=>{
       <ul class="game-lab-asset-list" id="game-lab-asset-list"></ul>
       <small>Les imatges es redueixen a 64 × 64 píxels abans de desar-les, per evitar alentiments. Els gràfics es poden canviar sense modificar la lògica Python.</small>
     </details>
-    <p class="game-lab-hint">Una pulsació equival a un torn. El codi Python controla el joc; el Canvas només dibuixa. Per evitar bloquejos, no utilitzis <code>input()</code> ni un bucle de joc infinit.</p>
+    <p class="game-lab-hint">Les accions especials es configuren en Python; el teu codi decideix si consumeixen un torn. El codi Python controla el joc; el Canvas només dibuixa. Per evitar bloquejos, no utilitzis <code>input()</code> ni un bucle de joc infinit.</p>
   </section>`;
  }
  function stop(){
