@@ -5,6 +5,24 @@
 (function(){
  const SOURCES=['https://cdn.jsdelivr.net/pyodide/v0.28.2/full/','https://unpkg.com/pyodide@0.28.2/'];
  let engine=null,ready=false,busy=false,started=false;
+ const MOVEMENT=['amunt','avall','esquerra','dreta'];
+ const RESERVED=new Set(['w','a','s','d']);
+ let allowedActions=new Set(MOVEMENT);
+ function validateActions(state){
+  const allowed=new Set(MOVEMENT);
+  const keys=state?.controls;
+  if(keys&&typeof keys==='object'&&!Array.isArray(keys)){
+   let count=0;
+   for(const [key,item] of Object.entries(keys)){
+    const k=key.trim().toLowerCase();
+    if(!/^(?:[a-z0-9]|espai|enter)$/.test(k)||RESERVED.has(k)||++count>12)continue;
+    const action=typeof item==='string'?item:item?.accio;
+    if(typeof action==='string'&&/^[a-z][a-z0-9_]{0,31}$/.test(action))allowed.add(action);
+   }
+  }
+  allowedActions=allowed;
+  return state;
+ }
  const send=(type,data={})=>self.postMessage({type,...data});
  async function load(index){
   const base=SOURCES[index===1?1:0];
@@ -28,7 +46,7 @@
    throw Error('El mapa Python no té les dimensions correctes.');
   }
   if(!Array.isArray(state.jugador)||state.jugador.length!==2||!state.jugador.every(Number.isInteger))throw Error('Posició de jugador incorrecta.');
-  return state;
+  return validateActions(state);
  }
  function play(functionCall){
   if(!ready)throw Error('Python encara no està preparat.');
@@ -54,10 +72,11 @@
    finally{busy=false;}
    return;
   }
-  if(msg.type==='move'&&ready){
-   if(!['amunt','avall','esquerra','dreta'].includes(msg.direction))return;
+  if((msg.type==='move'||msg.type==='action')&&ready){
+   const action=msg.type==='move'?msg.direction:msg.action;
+   if(typeof action!=='string'||!allowedActions.has(action))return;
    busy=true;
-   try{send('state',{state:play('torn('+JSON.stringify(msg.direction)+')')});}
+   try{send('state',{state:play('torn('+JSON.stringify(action)+')')});}
    catch(error){send('error',{stage:'turn',message:String(error?.message||error)});}
    finally{busy=false;}
   }
