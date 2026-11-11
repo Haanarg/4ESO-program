@@ -24,6 +24,10 @@ MOVIMENTS = {
     "amunt": (0, -1), "avall": (0, 1),
     "esquerra": (-1, 0), "dreta": (1, 0),
 }
+CONTROLS = {
+    "espai": {"accio": "esperar", "etiqueta": "⏳ Esperar"},
+    "i": {"accio": "inventari", "etiqueta": "🎒 Inventari"},
+}
 AMPLADA = len(MAPA[0])
 ALCADA = len(MAPA)
 ESTAT = {}
@@ -46,6 +50,7 @@ def mostrar(missatge=""):
         "te_clau": ESTAT["te_clau"],
         "torns": ESTAT["torns"], "estat": ESTAT["estat"],
         "missatge": missatge,
+        "controls": CONTROLS,
     }
 
 def inicia():
@@ -66,14 +71,17 @@ def torn(direccio):
         return inicia()
     if ESTAT["estat"] != "jugant":
         return mostrar("La partida ha acabat. Prem Nova partida.")
-    if direccio not in MOVIMENTS:
-        return mostrar("Fes servir les fletxes o WASD.")
+    if direccio == "inventari":
+        contingut = "clau" if ESTAT["te_clau"] else "buit"
+        return mostrar("Inventari: " + contingut)
+    if direccio not in MOVIMENTS and direccio != "esperar":
+        return mostrar("Acció no implementada.")
 
     ESTAT["torns"] += 1
     px, py = ESTAT["jugador"]
-    dx, dy = MOVIMENTS[direccio]
+    dx, dy = MOVIMENTS.get(direccio, (0, 0))
     nx, ny = px + dx, py + dy
-    missatge = ""
+    missatge = "Has esperat un torn." if direccio == "esperar" else ""
     if not lliure(nx, ny):
         missatge = "Una paret et barra el pas."
     elif (nx, ny) == ESTAT["porta"] and not ESTAT["te_clau"]:
