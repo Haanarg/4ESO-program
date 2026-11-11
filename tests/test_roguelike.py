@@ -73,6 +73,17 @@ class RoguelikePrototypeTests(unittest.TestCase):
         result=self.turn("ir a la lluna")
         self.assertEqual(result["torns"],0)
 
+    def test_configured_wait_spends_turn_inventory_does_not(self):
+        initial = self.start()
+        self.assertEqual(initial["controls"]["espai"]["accio"], "esperar")
+        self.assertEqual(initial["controls"]["i"]["accio"], "inventari")
+        inventory = self.turn("inventari")
+        self.assertEqual(inventory["torns"], 0)
+        self.assertIn("Inventari", inventory["missatge"])
+        waiting = self.turn("esperar")
+        self.assertEqual(waiting["torns"], 1)
+        self.assertEqual(waiting["jugador"], initial["jugador"])
+
     def test_restart_resets_state(self):
         self.turn("dreta")
         self.assertEqual(self.start()["torns"],0)
