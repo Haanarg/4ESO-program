@@ -1576,6 +1576,47 @@ async function api(req,env){
   return json({ok:true});
  }
  if(path==='/api/exercises'){const rows=await env.DB.prepare('SELECT id,chapter,code,title,type,statement,starter_code,rubric_json FROM exercises ORDER BY chapter,sort_order').all(); return json({exercises:rows.results.map(e=>({...e,starter_code:starterForExercise(e)}))})}
+ if(/^\/api\/exercises\/\d+\/game-assets$/.test(path)){
+  if(!user)return json({error:'Cal iniciar sessió.'},401);
+  const id=Number(path.split('/')[3]);
+  const e=await env.DB.prepare('SELECT id,code FROM exercises WHERE id=?').bind(id).first();
+  if(!e||e.code!=='12.5')return json({error:'Només disponible al projecte 12.5.'},404);
+  await ensureRoguelikeAssetsTables(env);
+  if(req.method==='GET'){
+   if(user.role==='teacher')return json({assets:[]});
+   const rows=await env.DB.prepare('SELECT slot,image,source,license FROM roguelike_assets WHERE user_id=? AND exercise_id=? ORDER BY slot').bind(user.id,id).all();
+   return json({assets:rows.results||[]});
+  }
+  if(user.role!=='student')return json({error:'La vista docent no desa assets.'},403);
+  const latest=await env.DB.prepare('SELECT status FROM submissions WHERE user_id=? AND exercise_id=? ORDER BY id DESC LIMIT 1').bind(user.id,id).first();
+  if(latest&&latest.status!=='returned')return json({error:'El projecte ja està entregat; cal que el professor el retorni per modificar assets.'},409);
+  let b;try{b=await req.json()}catch{return json({error:'Format no vàlid.'},400)}
+  const slot=String(b?.slot||'');
+  if(!ROGUELIKE_SLOTS.has(slot))return json({error:'Tipus de sprite desconegut.'},400);
+  if(req.method==='DELETE'){
+   await env.DB.prepare('DELETE FROM roguelike_assets WHERE user_id=? AND exercise_id=? AND slot=?').bind(user.id,id,slot).run();
+   return json({ok:true});
+  }
+  if(req.method!=='PUT')return json({error:'Mètode no admès.'},405);
+  const image=validateRoguelikeImage(b?.image);
+  if(!image)return json({error:'Cal una imatge PNG, JPEG o WebP de fins a 64 KB.'},400);
+  if(b?.rights_confirmed!==true)return json({error:'Confirma que tens permís per utilitzar aquesta imatge.'},400);
+  const source=String(b.source||'').trim().slice(0,300);
+  const license=String(b.license||'').trim().slice(0,100);
+  if(!license)return json({error:'Indica la llicència del recurs (o obra pròpia).'},400);
+  await env.DB.prepare(`INSERT INTO roguelike_assets(user_id,exercise_id,slot,image,source,license)
+   VALUES(?,?,?,?,?,?)
+   ON CONFLICT(user_id,exercise_id,slot) DO UPDATE SET
+    image=excluded.image,source=excluded.source,license=excluded.license,updated_at=CURRENT_TIMESTAMP`).bind(user.id,id,slot,image,source,license).run();
+  return json({ok:true,slot});
+ }
+ if(/^\/api\/teacher\/submissions\/\d+\/game-assets$/.test(path)&&req.method==='GET'){
+  if(user?.role!=='teacher')return json({error:'Accés reservat al professor.'},403);
+  const sid=Number(path.split('/')[4]);
+  await ensureRoguelikeAssetsTables(env);
+  const rows=await env.DB.prepare('SELECT slot,image,source,license FROM roguelike_submission_assets WHERE submission_id=?').bind(sid).all();
+  return json({assets:rows.results||[]});
+ }
  if(/^\/api\/exercises\/\d+\/draft$/.test(path) && req.method==='GET'){
   if(!user)return json({error:'Cal iniciar sessió.'},401);
   if(user.role==='teacher')return json({draft:null});
