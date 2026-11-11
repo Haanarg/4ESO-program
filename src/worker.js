@@ -350,6 +350,13 @@ async function syncChapter12(env){
   const prior=await env.DB.prepare('SELECT version FROM course_content_versions WHERE chapter=?').bind(12).first();
   if(prior?.version===CHAPTER12_VERSION)return;
   await env.DB.batch([
+   // Afegeix 12.5 sense canviar els identificadors 12.1–12.4.
+   ...chapter12Exercises.map(e=>env.DB.prepare(`INSERT OR IGNORE INTO exercises(
+     chapter,code,title,type,statement,starter_code,reference_solution,rubric_json,tests_json,sort_order
+   ) VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(
+     12,e.code,e.title,e.type,e.statement,e.starter,e.solution,
+     JSON.stringify(e.rubric),JSON.stringify(e.tests),parseFloat(e.code)
+   )),
    ...chapter12Exercises.map(e=>env.DB.prepare(`UPDATE exercises SET
      title=?,type=?,statement=?,starter_code=?,reference_solution=?,rubric_json=?,tests_json=?
      WHERE chapter=? AND code=?`).bind(
