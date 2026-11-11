@@ -1,5 +1,5 @@
 // Tema 12: contingut didàctic únic i versionat. No inclou cap dada personal.
-export const CHAPTER12_VERSION='roguelike-20261111-v1';
+export const CHAPTER12_VERSION='roguelike-20261111-v2';
 export const chapter12Exercises=[
   {
     "chapter": 12,
@@ -130,5 +130,48 @@ export const chapter12Exercises=[
         "points": 5
       }
     ]
-  }
+  },
+  {
+  "chapter": 12,
+  "code": "12.5",
+  "title": "Projecte final · Crea el teu videojoc 2D",
+  "type": "project",
+  "statement": "Dissenya un videojoc COMPLET per torns, amb gràfics al visor del laboratori 2D. Pots inspirar-te en Rogue, Gauntlet adaptat a torns, Pac-Man adaptat a torns, Jupiter Hell o Shattered Pixel Dungeon, o inventar un concepte propi. Treballa en Python amb les funcions inicia() i torn(direccio): el visor gràfic dibuixa el diccionari retornat. Parteix del joc mínim proporcionat i desenvolupa, com a mínim: 1) un mapa jugable amb obstacles i objectiu; 2) dues mecàniques pròpies diferents de simplement caminar i obrir la porta (enemics, combat, persecució, objectes, puntuació, inventari, diversos nivells, etc.); 3) condicions de victòria i derrota o una progressió de nivells; 4) instruccions clares per jugar i diverses proves. Fes servir els assets integrats o importa sprites PNG/JPG/WebP propis o amb llicència adequada al laboratori; indica als comentaris del codi la procedència i la llicència de recursos de tercers. Els recursos importats es poden previsualitzar a la teva partida i s'han de desar amb l'exercici abans de lliurar. No cal Pygame. El codi de l'alumne és el que determina què passa a cada torn: evita input(), bucles infinits i crides a xarxa. Valorem la funcionalitat, la programació, l'originalitat i el procés de prova, no la qualitat professional dels gràfics.",
+  "starter": "# PROJECTE 12.5 · EL TEU VIDEOJOC 2D\n# Aquest és un joc mínim FUNCIONAL: amplia'l fins a fer-lo teu.\n# La pantalla gràfica crida inicia() una vegada i torn(direccio) en cada tecla.\n# NO utilitzis input() ni un while de joc. El visor ja gestiona el teclat.\n# Les direccions disponibles són: amunt, avall, esquerra, dreta.\n\nmapa = [\n    \"##########\",\n    \"#........#\",\n    \"#..###...#\",\n    \"#........#\",\n    \"#...##...#\",\n    \"#........#\",\n    \"##########\"\n]\nmoviments = {\n    \"amunt\": (0, -1), \"avall\": (0, 1),\n    \"esquerra\": (-1, 0), \"dreta\": (1, 0)\n}\nESTAT = {}\n\ndef pantalla(missatge=\"\"):\n    \"\"\"Retorna què ha de dibuixar el visor (sense fer cap print).\"\"\"\n    return {\n        \"mapa\": mapa,\n        \"jugador\": [ESTAT[\"x\"], ESTAT[\"y\"]],\n        \"enemics\": ESTAT[\"enemics\"],\n        \"clau\": None if ESTAT[\"te_clau\"] else [6, 1],\n        \"porta\": [8, 5],\n        \"pocions\": ESTAT[\"pocions\"],\n        \"vida\": ESTAT[\"vida\"],\n        \"vida_max\": 5,\n        \"te_clau\": ESTAT[\"te_clau\"],\n        \"torns\": ESTAT[\"torns\"],\n        \"estat\": ESTAT[\"estat\"],\n        \"missatge\": missatge,\n        \"puntuacio\": ESTAT[\"puntuacio\"]\n    }\n\ndef inicia():\n    \"\"\"Prepara una partida. El visor crida aquesta funció al començament.\"\"\"\n    global ESTAT\n    ESTAT = {\n        \"x\": 1, \"y\": 1, \"vida\": 5, \"te_clau\": False,\n        \"enemics\": [], \"pocions\": [], \"torns\": 0,\n        \"puntuacio\": 0, \"estat\": \"jugant\"\n    }\n    return pantalla(\"Troba la clau, obre la porta i escapa!\")\n\ndef torn(direccio):\n    \"\"\"Calcula UNA acció del jugador i retorna el nou estat gràfic.\"\"\"\n    if ESTAT[\"estat\"] != \"jugant\":\n        return pantalla(\"La partida ja ha acabat.\")\n    if direccio not in moviments:\n        return pantalla(\"Ordre desconeguda.\")\n\n    ESTAT[\"torns\"] += 1\n    dx, dy = moviments[direccio]\n    nx, ny = ESTAT[\"x\"] + dx, ESTAT[\"y\"] + dy\n\n    # Impedeix sortir del mapa o travessar parets.\n    if not (0 <= ny < len(mapa) and 0 <= nx < len(mapa[0])):\n        return pantalla(\"Aquí s'acaba el mapa.\")\n    if mapa[ny][nx] == \"#\":\n        return pantalla(\"Hi ha una paret!\")\n\n    # La porta es troba a (8, 5).\n    if (nx, ny) == (8, 5) and not ESTAT[\"te_clau\"]:\n        return pantalla(\"Necessites trobar la clau.\")\n\n    ESTAT[\"x\"], ESTAT[\"y\"] = nx, ny\n    if (nx, ny) == (6, 1):\n        ESTAT[\"te_clau\"] = True\n        ESTAT[\"puntuacio\"] += 10\n        return pantalla(\"Has recollit la clau!\")\n    if (nx, ny) == (8, 5):\n        ESTAT[\"estat\"] = \"victoria\"\n        return pantalla(\"Has guanyat!\")\n\n    # TODO · Afegeix monstres, punts, pocions, objectes, nivells...\n    # TODO · Fes que el joc sigui diferent de l'exemple inicial!\n    return pantalla(\"Explora la masmorra.\")\n",
+  "solution": "Projecte obert: es valora la creativitat i la funcionalitat del codi Python amb inicia() i torn(direccio). El programa inicial és deliberadament mínim i no compleix encara els requisits del projecte final.",
+  "rubric": [
+    [
+      "Joc funcional, controls i objectiu",
+      3
+    ],
+    [
+      "Dues o més mecàniques pròpies i lògica per torns",
+      3
+    ],
+    [
+      "Estructura Python, estat i tractament d'errors",
+      2
+    ],
+    [
+      "Proves, explicació del projecte i recursos amb drets d'ús",
+      2
+    ]
+  ],
+  "tests": [
+    {
+      "kind": "syntax",
+      "points": 1
+    },
+    {
+      "kind": "has",
+      "pattern": "def inicia(",
+      "points": 1
+    },
+    {
+      "kind": "has",
+      "pattern": "def torn(",
+      "points": 1
+    }
+  ]
+}
 ];
