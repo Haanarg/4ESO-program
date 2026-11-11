@@ -22,6 +22,27 @@ La demostració **/roguelike.html** només executa el codi Python de confiança 
 
 Els alumnes poden treballar amb sprites integrats o importar imatges ràster petites (PNG, JPEG o WebP), indicant-ne la llicència i confirmant-ne els drets d'ús. Les imatges es normalitzen a 64 × 64 píxels abans de desar-les.
 
+## Controls configurables del 12.5 i de la demo
+
+- Moviment fix: fletxes o WASD `amunt`, `avall`, `esquerra`, `dreta`.
+- Els jocs poden retornar un diccionari `"controls"` dins de `pantalla()` / `mostrar()` que associa cada **tecla** amb una **acció**:
+
+```python
+controls = {
+    "espai": {"accio": "atacar", "etiqueta": "⚔ Atacar"},
+    "i": {"accio": "inventari", "etiqueta": "🎒 Inventari"},
+    "q": "pocio",
+    "1": {"accio": "espasa", "etiqueta": "Espasa"}
+}
+```
+
+- Fins a **12 tecles especials** de lletra única (excepte WASD), dígits 0–9, `espai` o `enter`. Nom d'acció amb lletres minúscules ASCII, dígits i `_` (fins a 32 caràcters). No s'accepten accions arbitràries no declarades: el Worker només executa els noms anunciats.
+- El visor crea botons tàctils per cada acció i actualitza els controls si canvien durant la partida. L'etiqueta és opcional.
+- La funció Python `torn(accio)` determina si consumeix un torn. Consultar inventari **no modifica** `estat["torns"]`; esperar, disparar, atacar o moure's poden incrementar-lo.
+- El protocol manté la compatibilitat amb `torn(direccio)` dels projectes antics i amb els mapes que no retornen `controls`.
+- Evitem `e.repeat` i la doble execució d'Enter/Espai quan un botó HTML té el focus.
+- Fitxers: `public/roguelike-lab-frame.js`, `public/roguelike-lab-worker.js`, `public/roguelike.js`, `public/roguelike-worker.js`. La versió del Worker aïllat del laboratori **s'incrusta** també al fitxer HTML; cal sincronitzar-la si es modifica el Worker.
+
 ## Com provar-lo
 
 1. Obre el panell del professor i prem «🧪 Prova el roguelike». Alternativament obre `/roguelike.html` dins el domini del curs.
