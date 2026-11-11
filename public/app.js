@@ -300,6 +300,7 @@ function runTeacherSubmittedCode(button){
 }
 
 function teacherLeaveSubmissionCorrection(){
+ if(typeof GameLab!=='undefined')GameLab.stop();
   if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   if(teacherCorrectionReturn.origin==='dashboard')return teacherDashboard();
   if(teacherCorrectionReturn.origin==='detail'&&teacherCorrectionReturn.studentId!=null)
@@ -319,6 +320,7 @@ function teacherSubmissionAiSummary(ai){
     (ai.teacher_warning?'<p class="ai-warning"><strong>⚠ Revisió recomanada:</strong> '+esc(ai.teacher_warning)+'</p>':'')+'</div>';
 }
 async function teacherOpenSubmissionCorrection(id,studentId=null,origin='progress'){
+ if(typeof GameLab!=='undefined')GameLab.stop();
   if(!user||user.role!=='teacher')return;
   if(typeof PythonConsole!=='undefined')PythonConsole.stop();
   teacherCorrectionReturn={studentId:studentId==null?null:Number(studentId),origin:['detail','dashboard'].includes(origin)?origin:'progress'};
@@ -506,6 +508,7 @@ function renderTheory(md){
   flushTable();closeLists();if(inCode)h+=`<pre class="theory-code"><code>${esc(code.join('\n'))}</code></pre>`;return h;
 }
 function openTheory(chapter){
+ if(typeof GameLab!=='undefined')GameLab.stop();
  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
  const names={1:'Sortida (output)',2:'Assignació de Variables',3:'Entrada (Input)',4:'Calcular',5:'Selecció IF ELSE',6:'Selecció ELIF',7:'Iteracions',8:'Llistes',9:'Subrutines',10:'Criptografia',11:'Aventura de text: entrades, bucles i funcions',12:'Mapes 2D i lògica de videojocs'};
@@ -515,6 +518,7 @@ function openTheory(chapter){
 }
 function openFirstExercise(chapter){if(typeof examMode!=='undefined'&&examMode){if(typeof renderExamQuestion==='function'&&examSession)renderExamQuestion();return}const e=exercises.find(x=>x.chapter===chapter);if(e)openExercise(e.id);else dashboard()}
 async function dashboard(){
+ if(typeof GameLab!=='undefined')GameLab.stop();
  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  if(typeof examCleanup==='function' && typeof examMode!=='undefined' && examMode) examCleanup();
  let examItems=[];
@@ -555,6 +559,7 @@ async function flushExerciseIntegrity(){
 }
 
 async function openExercise(id){
+ if(typeof GameLab!=='undefined')GameLab.stop();
  if(typeof PythonConsole!=='undefined')PythonConsole.stop();
  if(typeof examMode!=='undefined' && examMode){ if(typeof renderExamQuestion==='function' && examSession) renderExamQuestion(); return; }
  exerciseIntegrityPending=[];
@@ -576,9 +581,12 @@ async function openExercise(id){
    ? '<div class="preview-note"><strong>⚠ Esborrany del tema 12 anterior.</strong> Aquest codi es conserva, però ara l’exercici tracta de videojocs. Pots copiar la feina anterior i després prémer <button type="button" class="secondary mini-btn" onclick="loadUpdatedChapter12Starter()">Carrega el nou codi inicial</button>.</div>'
    : '';
  const returnedFeedback=isReturned?`<div class="returned-feedback"><div><span class="status returned">↩ Retornada</span><h3>Comentaris del professor</h3></div><p>${latestSubmission.teacher_comment?esc(latestSubmission.teacher_comment):'El professor ha retornat aquesta tasca perquè la puguis revisar i tornar a enviar.'}</p>${latestSubmission.returned_score!=null?`<small>Nota de l'intent retornat: ${esc(latestSubmission.returned_score)}/10</small>`:''}</div>`:'';
- $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p id="exercise-statement" class="statement">${esc(current.statement)}</p>${studentTranslatorHtml()}<h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><div class="python-flow"><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div>${obsoleteChapter12Notice}<textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div></section><section class="card exercise-output-card"><div class="output-heading"><h3>Sortida del programa</h3><small>Arrossega la cantonada inferior dreta per ampliar la consola. Hi pots desplaçar el contingut.</small></div><div id="output" class="output resizable-output" role="region" aria-label="Sortida i consola interactiva del programa"></div></section><div id="grade"></div></div></div>`;
+ $('#app').innerHTML=`${studentPreview?"<div class=\"preview-banner compact\"><strong>👁 Vista d'alumne</strong><button class=\"secondary\" onclick=\"exitStudentPreview()\">← Panell professor</button></div>":''}<div id="exercise-layout" class="grid ide-layout"><section id="statement-panel" class="card statement-panel"><div class="statement-head"><span class="pill">${esc(current.type)}</span><button class="collapse-statement secondary" onclick="toggleStatement()">◀ Amaga enunciat</button></div><h1>${esc(current.code)} · ${esc(current.title)}</h1><p id="exercise-statement" class="statement">${esc(current.statement)}</p>${studentTranslatorHtml()}<h3>Criteris</h3><ul>${rubric.map(x=>`<li>${esc(x[0])}: ${esc(x[1])} punts</li>`).join('')}</ul>${attempts?`<details class="attempt-history"><summary>Historial d'intents (${history.length})</summary>${attempts}</details>`:''}<button class="secondary" onclick="dashboard()">← Tornar</button></section><div class="python-flow"><section class="card python-workspace">${returnedFeedback}<div class="editor-heading"><h2>Editor Python</h2>${studentPreview?'':`<span id="draft-status" class="draft-status">${isReturned?'↩ Codi de l’intent recuperat':savedDraft?'✓ Esborrany recuperat':'Desament automàtic actiu'}</span>`}</div>${obsoleteChapter12Notice}<textarea id="code" spellcheck="false">${esc(editorCode)}</textarea><div class="editor-actions"><button class="run-primary" onclick="runCode()">▶ Executar</button>${studentPreview?'':`<button class="save-subtle secondary" onclick="saveDraft(true)">💾 Desa ara</button>`}<button id="submit-btn" class="submit-final ${submissionLocked?'submitted-lock':''}" onclick="submitCode()" ${(studentPreview||submissionLocked)?'disabled':''} title="${submissionLocked?'Aquest exercici ja està enviat. Es reactivarà si el professor el retorna.':''}">${submitLabel}</button></div></section><section class="card exercise-output-card"><div class="output-heading"><h3>Sortida del programa</h3><small>Arrossega la cantonada inferior dreta per ampliar la consola. Hi pots desplaçar el contingut.</small></div><div id="output" class="output resizable-output" role="region" aria-label="Sortida i consola interactiva del programa"></div></section>${current.code==='12.5'&&typeof GameLab!=='undefined'?GameLab.render():''}<div id="grade"></div></div></div>`;
  codeEditor=CodeMirror.fromTextArea($('#code'),{mode:{name:'python',version:3,singleLineStringErrors:false},lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,lineWrapping:false,viewportMargin:Infinity,autofocus:true,extraKeys:{Tab:cm=>cm.replaceSelection('    ','end')}});
  codeEditor.setSize('100%','clamp(540px,70vh,860px)');
+ if(current.code==='12.5'&&typeof GameLab!=='undefined'){
+  GameLab.init(current.id,{preview:studentPreview,locked:!!submissionLocked,codeProvider:()=>codeEditor?.getValue()||''});
+ }
  if(!studentPreview){
   codeEditor.on('change',()=>{const st=$('#draft-status');if(st){st.textContent='Canvis pendents…';st.className='draft-status pending-save'}if(draftTimer)clearTimeout(draftTimer);draftTimer=setTimeout(()=>saveDraft(false),1800)});
   if(!submissionLocked){
