@@ -1,6 +1,6 @@
 # Prototip roguelike 2D per a Programació 4ESO
 
-## Estat actual: fase 1 · demostració independent
+## Estat actual: fase 1 · demostració independent + projecte 12.5 integrat
 
 - Ruta de proves: `/roguelike.html` (també disponible des del botó del panell docent).
 - `public/roguelike-prototype.py`: joc real en Python, mapa 20×14, torns, parets, monstres, combat, clau, porta, pocions, vida i victòria/derrota.
@@ -9,8 +9,18 @@
 - `public/roguelike.html` i `public/roguelike.css`: pàgina i estil independents.
 - `tests/test_roguelike.py`: proves de mapa, moviment, col·lisions, combat, clau, porta i reinici.
 
-Aquest prototip **només executa codi Python de confiança del repositori**.
-No accepta encara codi lliure dels alumnes: per fer-ho cal executar-lo en un sandbox equivalent al de la consola del curs i limitar-ne els recursos. No modificar ni substituir la consola d'exercicis que ja funciona.
+La demostració **/roguelike.html** només executa el codi Python de confiança del repositori.
+**El nou 12.5 és diferent:** el codi lliure dels alumnes s'executa en un Worker dins d'un iframe `sandbox="allow-scripts"` sense same-origin, amb temporitzadors per interrompre bucles infinits.
+
+### Projecte final 12.5
+- `src/chapter12.js`: cinc exercicis 12.1–12.5 (12.5 és el projecte creatiu).
+- `public/theory.js`: introducció a Rogue, Gauntlet/Pac-Man per torns, Jupiter Hell i Shattered Pixel Dungeon, amb exemples de mecàniques i informació sobre llicències.
+- `public/roguelike-lab-ui.js`: interfície del laboratori integrada al costat de l'editor; envia el codi actual a la previsualització; permet importar sprites propis o CC0 i desar-los a D1.
+- `public/roguelike-lab.html`, `roguelike-lab-frame.js` i `roguelike-lab-worker.js`: visor Canvas i Python persistent aïllats.
+- `src/worker.js`: taules `roguelike_assets` i `roguelike_submission_assets`. Els recursos d'una entrega es copien al moment de lliurar, per facilitar la revisió posterior del professor. Els comptes eliminats també eliminen els assets.
+- En 12.5, `inicia()` i `torn(direccio)` retornen un diccionari JSON amb el mapa i l'estat. Les tecles i el dibuix es gestionen fora de Python.
+
+Els alumnes poden treballar amb sprites integrats o importar imatges ràster petites (PNG, JPEG o WebP), indicant-ne la llicència i confirmant-ne els drets d'ús. Les imatges es normalitzen a 64 × 64 píxels abans de desar-les.
 
 ## Com provar-lo
 
@@ -24,14 +34,14 @@ No accepta encara codi lliure dels alumnes: per fer-ho cal executar-lo en un san
 
 ## Properes fases
 
-1. Fase 2: IA i objectes extensibles, diversos tipus de monstres, inventari i animacions.
-2. Fase 3: generació de mapes en Python, llavors aleatòries, múltiples nivells i dificultat progressiva.
-3. Fase 4: nou capítol 13 amb exercicis guiats, codi modificable, guardat i execució **amb sandbox separat**. API de nivell alumne (`inicia()`, `torn(direccio)`) amb errors entenedors i límits per torn.
-4. Fase 5: galeria de roguelikes lliurats i validats pel professor, amb previsualització segura, separada de la galeria d'aventures de text 11.5.
+1. Diversos tipus d'enemics, comportaments, inventari ampliat, animacions i sons opcionals.
+2. Generació procedural de mapes i progressió entre nivells.
+3. Galeria pública de videojocs gràfics lliurats i validats pel professor, separada de l'11.5.
+4. Revisions del rendiment i la compatibilitat a ordinadors de l'institut i navegadors mòbils.
 
 ## Gràfics i llicències
 
-Fase 1 dibuixa sprites originals senzills en Canvas, **sense descarregar imatges externes**. Per a la següent fase, investigar:
+El joc de demostració i el 12.5 dibuixen sprites provisionals en Canvas, **sense descarregar imatges externes**. Al 12.5 els alumnes poden importar i desar els sprites que descarreguin legalment de:
 
 - [Free Game Assets — Fantasy RPG Icons](https://www.freegameassets.com/fantasy-rpg-icons): HUD, inventaris, monstres, pocions i armes.
 - [Free Game Assets — Pixel Fantasy Textures](https://www.freegameassets.com/pixel-fantasy-textures): pedra, murs, sòl i fusta.
@@ -41,8 +51,8 @@ El lloc presenta la biblioteca pròpia com a CC0, però **cal verificar la llic�
 
 ## Límits coneguts
 
-- No hi ha encara edició de mapes ni del codi de joc per a l'alumnat.
-- Gràfics pixel-art provisionals, sense sons ni sprites externs.
+- Al 12.5 el codi Python i els mapes són editables. Els sprites són personalitzables amb imatges individuals, però encara no hi ha editor visual de mapes ni biblioteca de recursos externs integrada.
+- Gràfics provisionals; sense animació en temps real ni sons. Els enllaços a bancs de recursos no descarreguen automàticament imatges de tercers.
 - Joc per torns; no es pretén simular Pygame ni un bucle de 60 FPS.
 - La primera càrrega de Pyodide requereix connexió; ambdues rutes CDN poden quedar bloquejades per una xarxa escolar.
 - El prototip encara requereix una comprovació visual i una partida completa en el desplegament real.
