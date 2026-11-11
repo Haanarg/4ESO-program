@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#080f1a;color:#d8e3f5}
+*{box-sizing:border-box}body{margin:0;padding:11px;background:linear-gradient(145deg,#08101e,#17263b);min-height:100vh}
+header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;margin-bottom:9px;font-size:12px}
+#lab-status{color:#a7ebd0;min-height:1em}
+#lab-canvas{display:block;width:100%;max-width:720px;height:auto;margin:auto;background:#101827;image-rendering:pixelated;border:2px solid #43516b;border-radius:7px}
+.canvas-wrap{display:flex;align-items:center;justify-content:center;min-height:220px;overflow:auto}
+.hud{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;font-size:12px;font-weight:700;color:#bddcf4;margin:10px 0}
+#lab-message{border-top:1px solid #354861;padding-top:8px;min-height:33px;font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.controls{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.pad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,35px);gap:4px}
+.pad button{background:#283b55;color:#eff8ff;border:1px solid #5d7ca2;border-radius:8px;font-weight:800;font-size:18px}
+.pad .u{grid-row:1;grid-column:2}.pad .l{grid-row:2;grid-column:1}.pad .d{grid-row:2;grid-column:2}.pad .r{grid-row:2;grid-column:3}
+button{cursor:pointer}button:focus-visible{outline:2px solid #f2d07d;outline-offset:2px}
+button.action{padding:9px 11px;border:1px solid #527a97;border-radius:8px;background:#172b44;color:#eff3fe}
+#error{color:#ffb4aa;white-space:pre-wrap;word-break:break-word;max-height:115px;overflow:auto;font:12px ui-monospace,monospace}
+.small{color:#8fa8bf;font-size:11px}
+</style>
+</head>
+<body tabindex="0">
+<header><strong>🎮 Joc Python · Prova 12.5</strong><span id="lab-status" role="status">Preparant visor…</span></header>
+<div class="canvas-wrap"><canvas id="lab-canvas" width="480" height="320" aria-label="Joc Python bidimensional"></canvas></div>
+<div class="hud"><span id="lab-life">♥ —</span><span id="lab-score">★ 0</span><span id="lab-turn">Torns: 0</span><span id="lab-key">🗝 —</span></div>
+<div id="lab-message" role="status">Prem «▶ Prova el joc» a l'editor.</div>
+<pre id="error" hidden></pre>
+<div class="controls">
+ <div class="pad">
+  <button type="button" data-direction="amunt" class="u" aria-label="Amunt">↑</button>
+  <button type="button" data-direction="esquerra" class="l" aria-label="Esquerra">←</button>
+  <button type="button" data-direction="avall" class="d" aria-label="Avall">↓</button>
+  <button type="button" data-direction="dreta" class="r" aria-label="Dreta">→</button>
+ </div>
+ <div><button type="button" id="lab-new" class="action">↻ Nova partida</button> <button type="button" id="lab-stop" class="action">■ Atura</button></div>
+</div>
+<p class="small">Fletxes / WASD · Primer fes clic dins del joc per activar el teclat · Una pulsació = un torn. Els gràfics només representen les dades retornades per Python.</p>
+<script type="application/json" id="rogue-lab-worker-source">"/* 12.5: Worker aïllat. Només rep codi de l'iframe sense same-origin.\n * Una execució amb bucle infinit es talla terminant el Worker sencer.\n */\n(function(){\n const CDNS=['https://cdn.jsdelivr.net/pyodide/v0.28.2/full/','https://unpkg.com/pyodide@0.28.2/'];\n let engine=null,started=false,busy=false;\n const send=(type,data={})=>self.postMessage({type,...data});\n async function load(code,provider){\n  const base=CDNS[provider===1?1:0];\n  send('loading',{message:'Carregant Python…'});\n  importScripts(base+'pyodide.js');\n  if(typeof loadPyodide!=='function')throw Error('No s’ha pogut descarregar Pyodide.');\n  send('loading',{message:'Inicialitzant Python i WebAssembly…'});\n  engine=await loadPyodide({indexURL:base});\n  send('loading',{message:'Comprovant i executant el codi del videojoc…'});\n  await engine.runPythonAsync(code);\n  // Requereix que el programa implementi totes dues funcions.\n  if(engine.runPython(\"callable(globals().get('inicia')) and callable(globals().get('torn'))\")!==true)\n   throw Error('El programa ha de definir inicia() i torn(direccio).');\n }\n function result(expression){\n  const value=engine.runPython(\"import json\\njson.dumps(\"+expression+\", ensure_ascii=False, allow_nan=False)\");\n  const s=String(value);\n  if(s.length>60000)throw Error('El mapa és massa gran per dibuixar-lo.');\n  return JSON.parse(s);\n }\n self.onmessage=async event=>{\n  const msg=event.data||{};\n  if(busy)return;\n  if(msg.type==='start'&&!started){\n   started=true;busy=true;\n   try{\n    const code=String(msg.code||'');\n    if(code.length>30000)throw Error('El codi supera el límit de 30.000 caràcters.');\n    await load(code,msg.cdnIndex===1?1:0);\n    send('state',{state:result('inicia()')});\n   }catch(error){\n    send('error',{stage:engine?'code':'loading',message:String(error?.message||error).slice(0,1400)});\n   }finally{busy=false;}\n  }else if(msg.type==='move'&&started&&engine){\n   if(!['amunt','avall','esquerra','dreta'].includes(msg.direction))return;\n   busy=true;\n   try{send('state',{state:result('torn('+JSON.stringify(msg.direction)+')')});}\n   catch(error){send('error',{stage:'turn',message:String(error?.message||error).slice(0,1400)});}\n   finally{busy=false;}\n  }else if(msg.type==='new'&&started&&engine){\n   busy=true;\n   try{send('state',{state:result('inicia()')});}\n   catch(error){send('error',{stage:'turn',message:String(error?.message||error).slice(0,1400)});}\n   finally{busy=false;}\n  }\n };\n})();\n"</script>
+<script src="/roguelike-lab-frame.js?v=20261111-lab1"></script>
+</body>
+</html>
