@@ -15,9 +15,9 @@
    let count=0;
    for(const [key,item] of Object.entries(keys)){
     const k=key.trim().toLowerCase();
-    if(!/^(?:[a-z0-9]|espai|enter)$/.test(k)||RESERVED.has(k)||++count>12)continue;
+    if(!/^(?:[a-z0-9]|espai|enter)$/.test(k)||RESERVED.has(k))continue;
     const action=typeof item==='string'?item:item?.accio;
-    if(typeof action==='string'&&/^[a-z][a-z0-9_]{0,31}$/.test(action))allowed.add(action);
+    if(typeof action==='string'&&/^[a-z][a-z0-9_]{0,31}$/.test(action)){allowed.add(action);if(++count>=12)break;}
    }
   }
   allowedActions=allowed;
