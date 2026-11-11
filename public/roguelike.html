@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ca">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1">
+ <meta name="theme-color" content="#0b1120">
+ <meta name="robots" content="noindex">
+ <title>Masmorra Python · prototip Programació 4ESO</title>
+ <link rel="stylesheet" href="/roguelike.css?v=20261111-r1">
+ <script src="/roguelike.js?v=20261111-r1" defer></script>
+</head>
+<body>
+ <header class="top">
+  <div class="brand"><a href="/">‹ Programació 4ESO</a><span class="separator">/</span><span>Laboratori de jocs</span></div>
+  <span class="tag">PROTOTIP EXPERIMENTAL · PYTHON + CANVAS</span>
+ </header>
+ <main>
+  <section class="intro">
+   <div>
+    <p class="eyebrow">Fase 1 · motor 2D</p>
+    <h1>La masmorra de Python</h1>
+    <p>Una demostració real: <strong>el moviment, les col·lisions, el combat i els monstres estan programats en Python</strong>. El navegador només dibuixa el mapa.</p>
+   </div>
+   <div class="status" id="game-status" role="status">Preparant la consola…</div>
+  </section>
+  <div class="layout">
+   <section class="game-panel" aria-label="Zona de joc">
+    <div class="game-top">
+     <strong>MASMORRA · NIVELL 01</strong>
+     <span id="game-turns">Torns: 0</span>
+    </div>
+    <div class="game-board">
+     <canvas id="game-canvas" width="640" height="448" aria-label="Mapa de la masmorra: mou el jugador amb les fletxes o WASD"></canvas>
+    </div>
+    <div class="hud">
+     <span id="game-hp">♥ 8 / 8</span>
+     <span id="game-key">🗝 Troba la clau</span>
+     <span>⚔ Ataca caminant cap a un monstre</span>
+    </div>
+    <p id="game-message" class="message" aria-live="polite">Preparant la masmorra…</p>
+    <div id="game-fallback" class="fallback" hidden>
+     <button type="button" id="retry-game">🌐 Torna a provar amb el servidor alternatiu</button>
+    </div>
+    <div class="game-actions">
+     <button id="new-game" type="button">↻ Nova partida</button>
+     <button id="switch-server" type="button" class="secondary">🌐 Canvia el servidor Python</button>
+    </div>
+   </section>
+   <aside class="sidebar">
+    <section class="box">
+     <h2>Com es juga?</h2>
+     <p>Recull la <strong>clau daurada</strong>, esquiva o derrota els monstres i arriba a la <strong>porta de sortida</strong>.</p>
+     <div class="pad" aria-label="Controls tàctils">
+      <button class="up" type="button" data-move="amunt" aria-label="Amunt">↑</button>
+      <button class="left" type="button" data-move="esquerra" aria-label="Esquerra">←</button>
+      <button class="down" type="button" data-move="avall" aria-label="Avall">↓</button>
+      <button class="right" type="button" data-move="dreta" aria-label="Dreta">→</button>
+     </div>
+     <p class="help">Amb teclat: fletxes o W · A · S · D. Cada moviment compta com un torn. Els monstres poden perseguir-te.</p>
+    </section>
+    <section class="box">
+     <h2>Què és Python aquí?</h2>
+     <p>El fitxer <code>roguelike-prototype.py</code> defineix el mapa, les funcions <code>inicia()</code> i <code>torn()</code>, la vida, les pocions i la IA dels enemics.</p>
+     <p>JavaScript només tradueix l'estat del joc en píxels i envia les direccions del teclat al programa Python.</p>
+     <a class="link" href="https://github.com/Haanarg/4ESO-program/blob/main/public/roguelike-prototype.py" target="_blank" rel="noopener">Consulta el codi Python del joc</a>
+    </section>
+    <section class="box">
+     <h2>Pròxim pas: sprites i textures</h2>
+     <p>Els gràfics són provisionals i estan dibuixats amb Canvas, sense fitxers externs. Podrem incorporar recursos de llicència verificada.</p>
+     <a class="link" href="https://www.freegameassets.com/fantasy-rpg-icons" target="_blank" rel="noopener noreferrer">Explora els Fantasy RPG Icons</a>
+     <a class="link" href="https://www.freegameassets.com/pixel-fantasy-textures" target="_blank" rel="noopener noreferrer">Explora les textures Pixel Fantasy</a>
+    </section>
+   </aside>
+  </div>
+  <footer>Projecte de proves de Programació 4ESO · No és encara una activitat qualificable ni una galeria d'alumnes.</footer>
+ </main>
+</body>
+</html>
