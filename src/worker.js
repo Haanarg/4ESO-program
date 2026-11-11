@@ -1,4 +1,5 @@
 import { examAnswerFingerprint, gradeExamQuestionAI } from './exam-ai.js';
+import { CHAPTER12_VERSION, chapter12Exercises } from './chapter12.js';
 
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const text = (data, status=200) => new Response(data, {status, headers:{'content-type':'text/plain; charset=utf-8'}});
@@ -306,6 +307,10 @@ const seedExercises = [
  {"chapter": 12, "code": "12.3", "title": "Visualització amb pyplot", "type": "project", "statement": "Utilitza matplotlib.pyplot per explorar dades. Crea com a mínim tres visualitzacions diferents (per exemple barres, histograma i dispersió), posa títols i etiquetes als eixos i explica què mostra cada gràfic. La primera càrrega de matplotlib al navegador pot tardar una mica.", "starter": "import matplotlib.pyplot as plt\n\n# Substitueix aquestes dades per les teves\nx = [1, 2, 3, 4, 5]\ny = [2, 5, 4, 8, 7]\n\nplt.plot(x, y)\nplt.title(\"Primera visualització\")\nplt.xlabel(\"X\")\nplt.ylabel(\"Y\")\nplt.show()\n\n# Crea almenys dues visualitzacions més.\n", "solution": "Projecte obert: s’esperen almenys tres tipus o configuracions de gràfic amb títols i etiquetes.", "rubric": [["Tres visualitzacions", 4], ["Etiquetes i presentació", 2], ["Interpretació de dades", 3], ["Qualitat del codi", 1]], "tests": [{"kind": "syntax", "points": 2}, {"kind": "has", "pattern": "matplotlib.pyplot", "points": 1}, {"kind": "count_has", "pattern": "plt.", "min": 6, "points": 2}]},
  {"chapter": 12, "code": "12.4", "title": "Projecte final: analitza les teves dades", "type": "project", "statement": "Projecte final del curs: analitza el conjunt de dades que has recollit. Genera almenys sis gràfics durant l’exploració, selecciona els tres més interessants i documenta al codi què explica cadascun. La nota valorarà especialment que les dades i les conclusions responguin una pregunta real que t’interessi.", "starter": "# PROJECTE FINAL — ANÀLISI DE DADES\n# 1. Carrega o escriu aquí les dades recollides.\n# 2. Prepara les llistes/estructures necessàries.\n# 3. Prova almenys sis visualitzacions.\n# 4. Conserva les tres millors i comenta què mostren.\n\nimport matplotlib.pyplot as plt\n\n", "solution": "Projecte obert i personal. El professor valida la qualitat de les dades, els gràfics i les conclusions.", "rubric": [["Recollida i preparació de dades", 2], ["Exploració amb almenys sis gràfics", 2], ["Tres visualitzacions finals", 2], ["Interpretació i conclusions", 3], ["Qualitat del codi", 1]], "tests": [{"kind": "syntax", "points": 2}, {"kind": "has", "pattern": "matplotlib.pyplot", "points": 1}]}];
 
+// El nou tema 12 substitueix les quatre entrades antigues (CSV, matplotlib).
+// Els codis i identificadors 12.1..12.4 es mantenen.
+seedExercises.splice(seedExercises.findIndex(e=>e.code==='12.1'),4,...chapter12Exercises);
+
 // Inicis corregits: els exercicis de construcció no han de revelar la solució.
 const correctedStarters = {
  '5.4': `# Programa de qualificacions (nota entre 1 i 100)
@@ -336,7 +341,47 @@ function starterForExercise(exercise){
  return correctedStarters[exercise.code] ?? exercise.starter_code;
 }
 
-async function seed(env){const n=await env.DB.prepare('SELECT COUNT(*) AS total FROM exercises').first(); if(Number(n?.total||0)>=seedExercises.length)return; for(const e of seedExercises){await env.DB.prepare(`INSERT OR IGNORE INTO exercises(chapter,code,title,type,statement,starter_code,reference_solution,rubric_json,tests_json,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(e.chapter,e.code,e.title,e.type,e.statement,correctedStarters[e.code]??e.starter,e.solution,JSON.stringify(e.rubric),JSON.stringify(e.tests),parseFloat(e.code)).run();}}
+// Actualitza el contingut docent existent a D1 sense eliminar registres.
+let chapter12SyncPromise=null;
+async function syncChapter12(env){
+ if(chapter12SyncPromise)return chapter12SyncPromise;
+ chapter12SyncPromise=(async()=>{
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS course_content_versions(
+    chapter INTEGER PRIMARY KEY,
+    version TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`).run();
+  const prior=await env.DB.prepare('SELECT version FROM course_content_versions WHERE chapter=?').bind(12).first();
+  if(prior?.version===CHAPTER12_VERSION)return;
+  await env.DB.batch([
+   ...chapter12Exercises.map(e=>env.DB.prepare(`UPDATE exercises SET
+     title=?,type=?,statement=?,starter_code=?,reference_solution=?,rubric_json=?,tests_json=?
+     WHERE chapter=? AND code=?`).bind(
+      e.title,e.type,e.statement,e.starter,e.solution,
+      JSON.stringify(e.rubric),JSON.stringify(e.tests),12,e.code
+     )),
+   env.DB.prepare(`INSERT INTO course_content_versions(chapter,version) VALUES(?,?)
+     ON CONFLICT(chapter) DO UPDATE SET
+     version=excluded.version,updated_at=CURRENT_TIMESTAMP`).bind(12,CHAPTER12_VERSION)
+  ]);
+ })().catch(err=>{chapter12SyncPromise=null;throw err});
+ return chapter12SyncPromise;
+}
+async function seed(env){
+ const n=await env.DB.prepare('SELECT COUNT(*) AS total FROM exercises').first();
+ if(Number(n?.total||0)<seedExercises.length){
+  for(const e of seedExercises){
+   await env.DB.prepare(`INSERT OR IGNORE INTO exercises(
+    chapter,code,title,type,statement,starter_code,reference_solution,rubric_json,tests_json,sort_order
+   ) VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(
+    e.chapter,e.code,e.title,e.type,e.statement,
+    correctedStarters[e.code]??e.starter,e.solution,JSON.stringify(e.rubric),
+    JSON.stringify(e.tests),parseFloat(e.code)
+   ).run();
+  }
+ }
+ await syncChapter12(env);
+}
 
 const EXAM_TOPIC_RULES={
   "1": {
