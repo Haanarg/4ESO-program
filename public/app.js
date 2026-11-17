@@ -16,7 +16,7 @@ async function api(path,opt={}){
 
 const STUDENT_TRANSLATOR_LANGS=[
  ['ca','Català'],['es','Castellà'],['en','Anglès'],['fr','Francès'],['de','Alemany'],['it','Italià'],['pt','Portuguès'],
- ['ar','Àrab'],['ro','Romanès'],['uk','Ucraïnès'],['ru','Rus'],['zh','Xinès'],['ur','Urdú'],['hi','Hindi'],['bn','Bengalí'],['pa','Panjabi']
+ ['ar','Àrab'],['tr','Turc'],['ro','Romanès'],['uk','Ucraïnès'],['ru','Rus'],['zh','Xinès'],['ur','Urdú'],['hi','Hindi'],['bn','Bengalí'],['pa','Panjabi']
 ];
 let studentTranslatorLastOutput='';
 
