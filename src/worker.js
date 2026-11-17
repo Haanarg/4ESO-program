@@ -860,7 +860,16 @@ ${isResearchTask ? "Aquesta és una tasca d'investigació. Avalua exclusivament 
 }
 
 async function api(req,env){
- await seed(env); const url=new URL(req.url); const path=url.pathname; const user=await auth(req,env);
+ const url=new URL(req.url),path=url.pathname;
+ // Durant un examen no tocar el temari: la sincronització del tema 12
+ // executa escriptures D1 i pot bloquejar o fer fallar el desament.
+ // Els exàmens tenen les seves pròpies taules i no depenen de seed().
+ const isExamApi=path.startsWith('/api/exams/') || path==='/api/exams'
+  || path.startsWith('/api/exam-attempts/')
+  || path.startsWith('/api/teacher/exams')
+  || path.startsWith('/api/teacher/exam-attempts/');
+ if(!isExamApi)await seed(env);
+ const user=await auth(req,env);
  if(path==='/api/register' && req.method==='POST'){
   let b;
   try{ b=await req.json(); }
