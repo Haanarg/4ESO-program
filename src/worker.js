@@ -890,7 +890,7 @@ async function api(req,env){
   const text=String(b.text||'').trim();
   const source=String(b.source_lang||'').trim().toLowerCase();
   const target=String(b.target_lang||'').trim().toLowerCase();
-  const allowed=new Set(['ca','es','en','fr','de','it','pt','ar','ro','uk','ru','zh','ur','hi','bn','pa']);
+  const allowed=new Set(['ca','es','en','fr','de','it','pt','ar','tr','ro','uk','ru','zh','ur','hi','bn','pa']);
   if(!text)return json({error:'Escriu o carrega un text per traduir.'},400);
   if(text.length>3500)return json({error:'El text és massa llarg per al traductor.'},400);
   if(!allowed.has(source)||!allowed.has(target))return json({error:'Idioma no admès.'},400);
